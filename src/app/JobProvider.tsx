@@ -5,6 +5,8 @@ import { probeWebGpu } from "@/lib/env";
 import type { Device, ModelId } from "@/lib/models";
 import { computePeaks, WAVEFORM_BUCKETS } from "@/lib/pcm";
 import { estimateStorage, mediaFits, requestPersistence } from "@/lib/storage";
+import { getEmbedder } from "@/lib/embed-client";
+import { indexLecture } from "@/lib/search-index";
 import { WhisperClient } from "@/lib/whisper-client";
 import { JobContext, lectureLockName, resolveDevice, resolveModel, type Job } from "./job";
 import { useNotes } from "./notes";
@@ -63,6 +65,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         decode: { status: "active" },
         load: { status: "active", loaded: 0, total: 0 },
         transcribe: { status: "pending", done: 0, total: 0 },
+        index: { status: "pending", done: 0, total: 0 },
       });
 
       void withLectureLock(lectureId, () =>
@@ -142,7 +145,21 @@ export function JobProvider({ children }: { children: ReactNode }) {
             ...j,
             transcribe: { ...j.transcribe, status: cancelled ? "error" : "done", ms, cancelled },
           }));
-          if (!cancelled && getSettings().autoNotes) void startNotes(id);
+          if (!cancelled) {
+            // Search index: small CPU model, so it runs before (optional) notes.
+            update((j) => ({ ...j, index: { ...j.index, status: "active" } }));
+            try {
+              await indexLecture(id, getEmbedder(), (done, total) =>
+                update((j) => ({ ...j, index: { ...j.index, done, total } })),
+              );
+              update((j) => ({ ...j, index: { ...j.index, status: "done" } }));
+            } catch (e) {
+              // Keyword search still works; the Search tab offers to retry.
+              console.error(e);
+              update((j) => ({ ...j, index: { ...j.index, status: "error", error: errMsg(e) } }));
+            }
+            if (getSettings().autoNotes) void startNotes(id);
+          }
         } catch (e) {
           await writes.catch(() => undefined);
           await db.lectures.update(id, { status: "error", error: errMsg(e) });
@@ -165,6 +182,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
     (job.decode.status === "active" ||
       job.load.status === "active" ||
       job.transcribe.status === "active" ||
+      job.index.status === "active" ||
       (job.decode.status === "done" &&
         job.load.status === "done" &&
         job.transcribe.status === "pending"));

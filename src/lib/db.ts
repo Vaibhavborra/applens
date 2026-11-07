@@ -23,6 +23,8 @@ export interface Lecture {
   model?: ModelId;
   device?: Device;
   transcribeMs?: number;
+  /** Embedding model the search index was built with; absent = not indexed. */
+  searchModel?: string;
 }
 
 export interface StoredSegment extends Segment {
@@ -56,12 +58,23 @@ export interface StoredFlashcard extends Card {
   lectureId: string;
 }
 
+export interface StoredPassage {
+  id?: number;
+  lectureId: string;
+  start: number;
+  end: number;
+  text: string;
+  /** L2-normalised embedding. */
+  vector: Float32Array;
+}
+
 export class LectureDB extends Dexie {
   lectures!: EntityTable<Lecture, "id">;
   segments!: EntityTable<StoredSegment, "id">;
   media!: EntityTable<StoredMedia, "lectureId">;
   notes!: EntityTable<StoredNotes, "lectureId">;
   flashcards!: EntityTable<StoredFlashcard, "id">;
+  passages!: EntityTable<StoredPassage, "id">;
 
   constructor(name = "lecture-notes-ai") {
     super(name);
@@ -75,6 +88,8 @@ export class LectureDB extends Dexie {
       notes: "lectureId",
       flashcards: "++id, lectureId",
     });
+    // v3 (Phase 7): semantic search passages.
+    this.version(3).stores({ passages: "++id, lectureId" });
   }
 }
 
@@ -136,12 +151,13 @@ export function getSegments(lectureId: string, database: LectureDB = db): Promis
 export async function resetTranscript(lectureId: string, database: LectureDB = db): Promise<void> {
   await database.transaction(
     "rw",
-    [database.lectures, database.segments, database.notes, database.flashcards],
+    [database.lectures, database.segments, database.notes, database.flashcards, database.passages],
     async () => {
       await database.segments.where("lectureId").equals(lectureId).delete();
       // Notes describe the old transcript, so they go too.
       await database.notes.delete(lectureId);
       await database.flashcards.where("lectureId").equals(lectureId).delete();
+      await database.passages.where("lectureId").equals(lectureId).delete();
       await database.lectures
         .where("id")
         .equals(lectureId)
@@ -149,6 +165,7 @@ export async function resetTranscript(lectureId: string, database: LectureDB = d
           l.status = "processing";
           delete l.error;
           delete l.transcribeMs;
+          delete l.searchModel;
         });
     },
   );
@@ -157,10 +174,18 @@ export async function resetTranscript(lectureId: string, database: LectureDB = d
 export async function deleteLecture(lectureId: string, database: LectureDB = db): Promise<void> {
   await database.transaction(
     "rw",
-    [database.lectures, database.segments, database.media, database.notes, database.flashcards],
+    [
+      database.lectures,
+      database.segments,
+      database.media,
+      database.notes,
+      database.flashcards,
+      database.passages,
+    ],
     async () => {
       await database.segments.where("lectureId").equals(lectureId).delete();
       await database.flashcards.where("lectureId").equals(lectureId).delete();
+      await database.passages.where("lectureId").equals(lectureId).delete();
       await database.notes.delete(lectureId);
       await database.media.delete(lectureId);
       await database.lectures.delete(lectureId);
@@ -229,4 +254,22 @@ export function getFlashcards(
   database: LectureDB = db,
 ): Promise<StoredFlashcard[]> {
   return database.flashcards.where("lectureId").equals(lectureId).sortBy("sourceStart");
+}
+
+/** Replace a lecture's search index atomically and record which model built it. */
+export async function savePassages(
+  lectureId: string,
+  passages: Omit<StoredPassage, "id" | "lectureId">[],
+  model: string,
+  database: LectureDB = db,
+): Promise<void> {
+  await database.transaction("rw", database.passages, database.lectures, async () => {
+    await database.passages.where("lectureId").equals(lectureId).delete();
+    await database.passages.bulkAdd(passages.map((p) => ({ ...p, lectureId })));
+    await database.lectures.update(lectureId, { searchModel: model });
+  });
+}
+
+export function getPassages(lectureId: string, database: LectureDB = db): Promise<StoredPassage[]> {
+  return database.passages.where("lectureId").equals(lectureId).sortBy("start");
 }

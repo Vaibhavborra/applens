@@ -79,6 +79,20 @@ function buildSteps(job: Job): StepView[] {
       detail: tDetail,
       progress: transcribe.total > 0 ? transcribe.done / transcribe.total : undefined,
     },
+    {
+      id: "index",
+      label: "Indexing for search",
+      status: job.index.status,
+      detail:
+        job.index.status === "error"
+          ? "Failed — keyword search still works"
+          : job.index.status === "done"
+            ? `${job.index.total} passages`
+            : job.index.total > 0
+              ? `${job.index.done} / ${job.index.total}`
+              : undefined,
+      progress: job.index.total > 0 ? job.index.done / job.index.total : undefined,
+    },
   ];
 }
 

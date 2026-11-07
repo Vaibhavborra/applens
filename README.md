@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phase 6 (on-device AI notes, summary, key terms and flashcards). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phase 7 (semantic + keyword search with timestamps). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -19,6 +19,7 @@ node scripts/e2e-transcribe.mjs <file> [--device=wasm] [--model=fast|balanced|be
 node scripts/e2e-player.mjs <speech-file>   # seek, highlight, shortcuts, fallback playback
 node scripts/e2e-persist.mjs <short-speech> <long-speech>   # save, reload, interrupt, delete
 node scripts/e2e-notes.mjs <speech-file> [--model=fast|better] [--hp]   # AI notes (needs WebGPU)
+node scripts/e2e-search.mjs <algorithms-lecture.wav>   # semantic + keyword search
 ```
 
 ## Deploy (Cloudflare Pages)
@@ -67,6 +68,12 @@ Notes are written by a small instruct model running on WebGPU via WebLLM (in a W
 Measured on an RTX (Ampere) laptop GPU, 4.4-min lecture: Fast ≈ 50 s, Better ≈ 107 s (both after the model is cached).
 
 **Integrated GPUs:** on an AMD Vega iGPU, WebLLM loses the WebGPU device on any prompt over ~300 tokens (Windows GPU watchdog), regardless of model size or precision. The app detects this and explains how to switch the browser to the dedicated GPU (Chrome on Windows ignores WebGPU's `powerPreference`; Windows' per-app Graphics setting decides). Transcription still works on iGPUs.
+
+## Search
+
+After transcription, the transcript is split into overlapping passages (3 segments, stride 2) and embedded with `all-MiniLM-L6-v2` (23 MB, q8) in a Web Worker on **WASM**, deliberately not WebGPU: it is fast enough on the CPU, never competes with Whisper/WebLLM for the GPU, and works on GPUs that cannot run the notes model. Vectors are L2-normalised and stored in IndexedDB; a query is embedded the same way and ranked by cosine similarity in JS (top 5, near-duplicate moments merged). Keyword search runs alongside with word-prefix, case- and accent-insensitive matching, quoted phrases and highlighting. Lectures saved before indexing existed are indexed the first time their Search tab opens.
+
+On the 4-topic test lecture, paraphrased questions ("what happens when two keys land in the same bucket?") rank the right passage first; a deliberately obscure paraphrase of "pivot" ranks it second.
 
 ## Stack
 

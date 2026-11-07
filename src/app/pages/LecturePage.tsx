@@ -5,6 +5,7 @@ import { JobSteps } from "@/components/JobSteps";
 import { LectureStatusBadge } from "@/components/LectureStatusBadge";
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { NotesPanel } from "@/components/NotesPanel";
+import { SearchPanel } from "@/components/SearchPanel";
 import { TabPanel, Tabs, type TabDef } from "@/components/Tabs";
 import { TranscriptView } from "@/components/TranscriptView";
 import { Button, Card } from "@/components/ui";
@@ -49,7 +50,7 @@ export function LecturePage({ id }: { id: string }) {
   return <LectureView lecture={lecture} segments={segments} live={live} />;
 }
 
-type LectureTab = "notes" | "transcript" | "flashcards";
+type LectureTab = "notes" | "transcript" | "flashcards" | "search";
 
 interface MediaSource {
   blob: Blob;
@@ -134,6 +135,7 @@ function LectureView({
     },
     { id: "transcript", label: "Transcript" },
     { id: "flashcards", label: cardCount ? `Flashcards (${cardCount})` : "Flashcards" },
+    { id: "search", label: "Search" },
   ];
 
   return (
@@ -253,6 +255,17 @@ function LectureView({
             <div hidden={currentTab !== "flashcards"}>
               <TabPanel idPrefix="lecture" id="flashcards">
                 <FlashcardsPanel lectureId={lecture.id} onSeek={seekTo} />
+              </TabPanel>
+            </div>
+            <div hidden={currentTab !== "search"}>
+              <TabPanel idPrefix="lecture" id="search">
+                <SearchPanel
+                  lecture={lecture}
+                  segments={segments}
+                  active={currentTab === "search"}
+                  processing={running}
+                  onSeek={seekTo}
+                />
               </TabPanel>
             </div>
           </Card>

@@ -22,6 +22,8 @@ export interface Job {
     cancelled?: boolean;
     error?: string;
   };
+  /** Embedding passages for semantic search (after transcription). */
+  index: { status: StepStatus; done: number; total: number; error?: string };
 }
 
 export interface JobApi {
