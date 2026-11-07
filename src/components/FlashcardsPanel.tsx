@@ -1,7 +1,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { getFlashcards, type StoredFlashcard } from "@/lib/db";
+import { StudyMode } from "./StudyMode";
 import { TimeChip } from "./TimeChip";
+import { Button } from "./ui";
 
 export function FlashcardsPanel({
   lectureId,
@@ -11,6 +13,7 @@ export function FlashcardsPanel({
   onSeek?: ((t: number) => void) | undefined;
 }) {
   const cards = useLiveQuery(() => getFlashcards(lectureId), [lectureId]);
+  const [studying, setStudying] = useState(false);
   if (!cards) return null;
   if (cards.length === 0) {
     return (
@@ -19,11 +22,19 @@ export function FlashcardsPanel({
       </p>
     );
   }
+  if (studying) {
+    return <StudyMode cards={cards} onExit={() => setStudying(false)} onSeek={onSeek} />;
+  }
   return (
     <div>
-      <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">
-        {cards.length} cards · click a card to reveal the answer
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          {cards.length} cards · click a card to reveal the answer
+        </p>
+        <Button variant="primary" onClick={() => setStudying(true)} data-testid="study-start">
+          Study these cards
+        </Button>
+      </div>
       <ul className="grid gap-3 sm:grid-cols-2" data-testid="flashcards">
         {cards.map((c) => (
           <FlipCard key={c.id} card={c} onSeek={onSeek} />

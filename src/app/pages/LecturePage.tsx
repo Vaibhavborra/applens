@@ -1,5 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState, type ReactNode } from "react";
+import { ExportMenu } from "@/components/ExportMenu";
 import { FlashcardsPanel } from "@/components/FlashcardsPanel";
 import { JobSteps } from "@/components/JobSteps";
 import { LectureStatusBadge } from "@/components/LectureStatusBadge";
@@ -16,6 +17,7 @@ import { formatBytes, formatDate } from "@/lib/format";
 import { getModel } from "@/lib/models";
 import { formatTimestamp } from "@/lib/time";
 import { useJob, type Job } from "../job";
+import { useDocumentTitle } from "../useDocumentTitle";
 import { useNotes } from "../notes";
 import { Link } from "../Link";
 import { navigate } from "../router";
@@ -103,6 +105,7 @@ function LectureView({
     void start(file, lecture.id);
   };
   const canRerun = !busy && source !== null && lecture.status !== "processing";
+  useDocumentTitle(lecture.title);
   const seekTo = media && source ? (t: number) => seek(t) : undefined;
 
   // Default to Notes once they exist, else Transcript, until the user picks a tab.
@@ -157,7 +160,10 @@ function LectureView({
             {lecture.device && ` (${lecture.device === "webgpu" ? "WebGPU" : "WASM"})`}
           </p>
         </div>
-        <LectureStatusBadge lecture={lecture} job={job} />
+        <div className="flex items-center gap-2">
+          <LectureStatusBadge lecture={lecture} job={job} />
+          <ExportMenu lecture={lecture} segments={segments} />
+        </div>
       </header>
 
       <StatusBanner lecture={lecture} live={live} canRerun={canRerun} onRerun={transcribeAgain} />
@@ -219,7 +225,8 @@ function LectureView({
         lecture.status !== "processing" ||
         live?.transcribe.status !== "pending") &&
         !(live?.decode.status === "error") && (
-          <Card className="pt-2">
+          // Invisible until we know whether notes exist, so the default tab doesn't flash.
+          <Card className={`pt-2 ${hasNotes === undefined ? "invisible" : ""}`}>
             <Tabs idPrefix="lecture" tabs={tabs} value={currentTab} onChange={setTab} />
             {/* Panels stay mounted (scroll position, flipped cards survive tab switches). */}
             <div hidden={currentTab !== "notes"}>

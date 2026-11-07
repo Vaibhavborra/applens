@@ -10,10 +10,20 @@ export interface Settings {
   notesModel: NotesModelId;
   /** Write AI notes automatically when a transcription finishes (off: big first download). */
   autoNotes: boolean;
+  /** Colour scheme; "system" follows the OS. */
+  theme: Theme;
 }
 
+export type Theme = "system" | "light" | "dark";
+
 const KEY = "lna.settings";
-const DEFAULTS: Settings = { model: "fast", keepMedia: true, notesModel: "fast", autoNotes: false };
+const DEFAULTS: Settings = {
+  model: "fast",
+  keepMedia: true,
+  notesModel: "fast",
+  autoNotes: false,
+  theme: "system",
+};
 
 function load(): Settings {
   try {
@@ -25,6 +35,7 @@ function load(): Settings {
       keepMedia: typeof raw.keepMedia === "boolean" ? raw.keepMedia : DEFAULTS.keepMedia,
       notesModel: isNotesModelId(raw.notesModel) ? raw.notesModel : DEFAULTS.notesModel,
       autoNotes: typeof raw.autoNotes === "boolean" ? raw.autoNotes : DEFAULTS.autoNotes,
+      theme: raw.theme === "light" || raw.theme === "dark" ? raw.theme : "system",
     };
   } catch {
     return DEFAULTS;

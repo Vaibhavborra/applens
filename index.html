@@ -9,6 +9,16 @@
       content="Turn any lecture recording into notes, flashcards and searchable timestamps — entirely in your browser."
     />
     <title>Lecture Notes AI</title>
+    <script>
+      // Apply the saved theme before first paint (no light flash in dark mode).
+      try {
+        var t = JSON.parse(localStorage.getItem("lna.settings") || "{}").theme;
+        var dark =
+          t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,5 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
+import { BrowserSupportBanner } from "@/components/BrowserSupportBanner";
 import { DropZone } from "@/components/DropZone";
 import { LectureList } from "@/components/LectureList";
 import { ModelPicker } from "@/components/ModelPicker";
@@ -12,6 +13,7 @@ import { estimateStorage, type StorageEstimate } from "@/lib/storage";
 import { resolveDevice, resolveModel, useJob } from "../job";
 import { navigate } from "../router";
 import { updateSettings, useSettings } from "../settings";
+import { useDocumentTitle } from "../useDocumentTitle";
 import { useGpu } from "../useGpu";
 
 export function HomePage() {
@@ -22,6 +24,7 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const lectures = useLiveQuery(() => db.lectures.orderBy("createdAt").reverse().toArray(), []);
   const storage = useStorageEstimate(lectures?.length);
+  useDocumentTitle();
 
   const device = resolveDevice(gpu?.webgpu ?? false);
   const model = gpu ? resolveModel(settings.model, device, gpu) : settings.model;
@@ -36,6 +39,7 @@ export function HomePage() {
 
   return (
     <>
+      <BrowserSupportBanner caps={caps} gpu={gpu} />
       <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
         Lecture recordings → notes, flashcards, search.
       </h1>

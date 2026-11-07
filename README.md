@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phase 7 (semantic + keyword search with timestamps). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phase 8 done (exports, flashcard study mode, polish). Phase 9 (stretch goals) next. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -20,6 +20,7 @@ node scripts/e2e-player.mjs <speech-file>   # seek, highlight, shortcuts, fallba
 node scripts/e2e-persist.mjs <short-speech> <long-speech>   # save, reload, interrupt, delete
 node scripts/e2e-notes.mjs <speech-file> [--model=fast|better] [--hp]   # AI notes (needs WebGPU)
 node scripts/e2e-search.mjs <algorithms-lecture.wav>   # semantic + keyword search
+node scripts/e2e-polish.mjs   # exports, study mode, theme, support banner (after e2e-notes)
 ```
 
 ## Deploy (Cloudflare Pages)
@@ -74,6 +75,12 @@ Measured on an RTX (Ampere) laptop GPU, 4.4-min lecture: Fast ≈ 50 s, Better �
 After transcription, the transcript is split into overlapping passages (3 segments, stride 2) and embedded with `all-MiniLM-L6-v2` (23 MB, q8) in a Web Worker on **WASM**, deliberately not WebGPU: it is fast enough on the CPU, never competes with Whisper/WebLLM for the GPU, and works on GPUs that cannot run the notes model. Vectors are L2-normalised and stored in IndexedDB; a query is embedded the same way and ranked by cosine similarity in JS (top 5, near-duplicate moments merged). Keyword search runs alongside with word-prefix, case- and accent-insensitive matching, quoted phrases and highlighting. Lectures saved before indexing existed are indexed the first time their Search tab opens.
 
 On the 4-topic test lecture, paraphrased questions ("what happens when two keys land in the same bucket?") rank the right passage first; a deliberately obscure paraphrase of "pivot" ranks it second.
+
+## Exports and studying
+
+From a lecture's **Export** menu: notes as Markdown (timestamps inline), flashcards as a two-column CSV that Anki imports directly (File → Import, comma-separated; the source timestamp is appended to each answer), the transcript as `.txt`, and subtitles as `.srt` (non-overlapping cues, wrapped lines). **Study mode** shows one card at a time: Space reveals, 1/← = again (the card returns three cards later), 2/→ = got it; the summary offers a review of only the missed cards.
+
+Light, dark and system themes (toggle in the header, applied before first paint), a browser-support banner when WebGPU or storage is missing, and an error boundary per page round it out.
 
 ## Stack
 

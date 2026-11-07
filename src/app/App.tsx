@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card } from "@/components/ui";
 import { markInterrupted } from "@/lib/db";
 import { lectureLockName } from "./job";
@@ -47,12 +49,18 @@ function Shell() {
             <img src="/favicon.svg" alt="" className="size-7" />
             <span className="font-semibold tracking-tight">Lecture Notes AI</span>
           </Link>
+          <div className="ml-auto">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-10">
-        {route.name === "home" && <HomePage />}
-        {route.name === "lecture" && <LecturePage key={route.id} id={route.id} />}
+        {/* Keyed by route so a crash on one page doesn't stick after navigating away. */}
+        <ErrorBoundary key={route.name === "lecture" ? route.id : route.name}>
+          {route.name === "home" && <HomePage />}
+          {route.name === "lecture" && <LecturePage key={route.id} id={route.id} />}
+        </ErrorBoundary>
         {route.name === "not-found" && (
           <Card>
             <p className="font-medium">Page not found.</p>
