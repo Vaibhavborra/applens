@@ -19,6 +19,8 @@ export default defineConfig({
   server: { headers: crossOriginIsolation },
   preview: { headers: crossOriginIsolation },
   worker: { format: "es" },
+  // ffmpeg.wasm spawns its worker via new URL(..., import.meta.url); pre-bundling breaks that.
+  optimizeDeps: { exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"] },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

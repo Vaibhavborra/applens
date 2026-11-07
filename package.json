@@ -12,9 +12,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "npm run build && node scripts/e2e-decode.mjs"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -29,6 +31,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.14.0",
+    "playwright-core": "^1.65.0",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4.3.5",

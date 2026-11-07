@@ -19,5 +19,10 @@ export default defineConfig([
       ecmaVersion: 2023,
       globals: { ...globals.browser, ...globals.worker },
     },
+    rules: {
+      // noUncheckedIndexedAccess types every typed-array read as `number | undefined`;
+      // `!` inside bounds-checked DSP loops is the intended escape hatch.
+      "@typescript-eslint/no-non-null-assertion": "off",
+    },
   },
 ]);
