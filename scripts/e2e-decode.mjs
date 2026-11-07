@@ -93,6 +93,7 @@ async function run(name, expect, load) {
     '[data-testid="decode-result"], [data-testid="decode-error"]',
     {
       timeout: 180_000,
+      state: "attached",
     },
   );
   const testid = await el.getAttribute("data-testid");

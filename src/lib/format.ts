@@ -9,3 +9,9 @@ export function formatBytes(bytes: number): string {
   }
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
 }
+
+const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+export function formatDate(ts: number): string {
+  return dateFmt.format(ts);
+}

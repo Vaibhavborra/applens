@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phase 4 (player sync: click-to-seek, live highlight, waveform scrubbing). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phase 5 (lectures saved locally in IndexedDB; reopen, rename, delete). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -17,6 +17,7 @@ npm run build        # production build → dist/
 npm run e2e          # decode smoke test in your installed Chrome (playwright-core)
 node scripts/e2e-transcribe.mjs <file> [--device=wasm] [--model=fast|balanced|best] [--expect=word,word]
 node scripts/e2e-player.mjs <speech-file>   # seek, highlight, shortcuts, fallback playback
+node scripts/e2e-persist.mjs <short-speech> <long-speech>   # save, reload, interrupt, delete
 ```
 
 ## Deploy (Cloudflare Pages)
@@ -51,6 +52,10 @@ Weights are cached in the browser after the first download. WASM (q8) ran Fast a
 
 The original file plays in a `<video>` or `<audio>` element (audio-only video containers are detected and shown as audio). If the browser can't play the format, a WAV is built from the decoded audio so every file that decodes also plays. Click a transcript line or the waveform to seek; the line under the playhead is highlighted and kept in view (paused for a few seconds after you scroll yourself). Shortcuts: Space play/pause, ←/→ ±5 s.
 
+## Saved lectures
+
+Lectures live in IndexedDB (Dexie): `lectures` (metadata + waveform peaks), `segments` (written window-by-window as transcription runs, so a closed tab keeps what's done), and `media` (the original file, kept separate so listing lectures never loads blobs). Saving the recording is optional; without it you keep the transcript and can re-attach the file later. A tab running a job holds a Web Lock per lecture, so on startup only genuinely abandoned jobs are marked "interrupted" and can be transcribed again.
+
 ## Stack
 
-Vite · React 19 · TypeScript (strict) · Tailwind CSS v4 · Vitest · ESLint · Prettier
+Vite · React 19 · TypeScript (strict) · Tailwind CSS v4 · Transformers.js · Dexie · Vitest · ESLint · Prettier

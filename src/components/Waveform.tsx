@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
-import { computePeaks } from "@/lib/pcm";
+import { useEffect, useRef } from "react";
+import type { Peaks } from "@/lib/pcm";
 import { nudgeMedia, seekMedia } from "@/lib/playback";
 import { formatTimestamp } from "@/lib/time";
 
-const PEAK_BUCKETS = 4000;
-
 interface Props {
-  pcm: Float32Array;
-  /** Duration of `pcm` in seconds. */
+  /** Min/max buckets from computePeaks (stored with the lecture). */
+  peaks: Peaks;
+  /** Duration of the audio in seconds. */
   durationSec: number;
   /** When given, shows a playhead and click/keyboard seeking. */
   media?: HTMLMediaElement | null;
@@ -15,11 +14,10 @@ interface Props {
 }
 
 /** Min/max waveform. Colour comes from CSS `color` (currentColor). */
-export function Waveform({ pcm, durationSec, media = null, className = "" }: Props) {
+export function Waveform({ peaks, durationSec, media = null, className = "" }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const playhead = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const peaks = useMemo(() => computePeaks(pcm, PEAK_BUCKETS), [pcm]);
 
   useEffect(() => {
     const el = canvas.current;

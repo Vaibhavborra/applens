@@ -1,26 +1,44 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { looksLikeVideo } from "@/lib/playback";
 import { encodeWav } from "@/lib/wav";
 
 interface Props {
-  file: File;
-  /** Decoded 16 kHz audio; used to synthesise a WAV if the browser can't play the file. */
-  fallbackPcm?: Float32Array | undefined;
+  source: Blob;
+  fileName: string;
+  fileType: string;
+  /**
+   * Decoded 16 kHz mono PCM, fetched lazily only if the browser can't play
+   * `source` (a live job already has it; a reopened lecture re-decodes).
+   */
+  loadFallbackPcm: () => Promise<Float32Array>;
   sampleRate: number;
   /** Receives the active <audio>/<video> element (it changes if we switch element type). */
   mediaRef: (el: HTMLMediaElement | null) => void;
 }
+
+type Fallback =
+  | { state: "none" }
+  | { state: "loading" }
+  | { state: "ready"; blob: Blob }
+  | { state: "failed"; message: string };
 
 /**
  * Plays the original file. Video files get a <video>; video containers with no
  * picture (e.g. audio-only .mp4) are switched to <audio>. If the browser can't
  * play the file at all, plays a WAV made from the decoded PCM instead.
  */
-export function MediaPlayer({ file, fallbackPcm, sampleRate, mediaRef }: Props) {
+export function MediaPlayer({
+  source,
+  fileName,
+  fileType,
+  loadFallbackPcm,
+  sampleRate,
+  mediaRef,
+}: Props) {
   const [kind, setKind] = useState<"video" | "audio">(() =>
-    looksLikeVideo(file) ? "video" : "audio",
+    looksLikeVideo({ name: fileName, type: fileType }) ? "video" : "audio",
   );
-  const [failed, setFailed] = useState(false);
+  const [fallback, setFallback] = useState<Fallback>({ state: "none" });
   const el = useRef<HTMLMediaElement | null>(null);
   const setEl = useCallback(
     (node: HTMLMediaElement | null) => {
@@ -30,40 +48,51 @@ export function MediaPlayer({ file, fallbackPcm, sampleRate, mediaRef }: Props) 
     [mediaRef],
   );
 
-  // Only built once the original fails and decoded PCM exists (~115 MB per hour).
-  const fallback = useMemo(
-    () => (failed && fallbackPcm ? encodeWav(fallbackPcm, sampleRate) : null),
-    [failed, fallbackPcm, sampleRate],
-  );
-  const source: Blob | null = failed ? fallback : file;
-  const usingFallback = failed && fallback !== null;
+  const blob =
+    fallback.state === "ready" ? fallback.blob : fallback.state === "none" ? source : null;
 
   // Object URLs are an external resource: create/revoke alongside the element's src.
   useEffect(() => {
     const node = el.current;
-    if (!node || !source) return;
-    const url = URL.createObjectURL(source);
+    if (!node || !blob) return;
+    const url = URL.createObjectURL(blob);
     node.src = url;
     return () => URL.revokeObjectURL(url);
-  }, [source, kind]);
+  }, [blob, kind]);
 
-  if (failed && !fallback) {
+  const onError = () => {
+    if (fallback.state !== "none") return;
+    setFallback({ state: "loading" });
+    loadFallbackPcm().then(
+      (pcm) => setFallback({ state: "ready", blob: encodeWav(pcm, sampleRate) }),
+      (e: unknown) =>
+        setFallback({ state: "failed", message: e instanceof Error ? e.message : String(e) }),
+    );
+  };
+
+  if (fallback.state === "loading") {
     return (
       <p className="text-sm text-zinc-500 dark:text-zinc-400">
         This format can't be played directly. Preparing playable audio…
       </p>
     );
   }
+  if (fallback.state === "failed") {
+    return (
+      <p className="text-sm text-red-600 dark:text-red-400">
+        Couldn't play this file: {fallback.message}
+      </p>
+    );
+  }
 
+  const usingFallback = fallback.state === "ready";
   const common = {
     ref: setEl,
     controls: true,
     preload: "auto" as const,
     "data-testid": "media",
     "data-fallback": usingFallback,
-    onError: () => {
-      if (!failed) setFailed(true);
-    },
+    onError,
   };
 
   return (

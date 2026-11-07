@@ -44,6 +44,9 @@ export interface Peaks {
   max: Float32Array;
 }
 
+/** Resolution of stored/drawn waveforms (~32 KB per lecture). */
+export const WAVEFORM_BUCKETS = 4000;
+
 /** Min/max per bucket for waveform drawing. */
 export function computePeaks(pcm: Float32Array, buckets: number): Peaks {
   const n = Math.max(1, Math.min(buckets, pcm.length || 1));
