@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { errorMessage } from "@/lib/errors";
 import { getSegments, saveNotes } from "@/lib/db";
 import { probeWebGpu } from "@/lib/env";
 import type { WebLlmNotes } from "@/lib/llm-client";
@@ -9,7 +10,7 @@ import { OllamaNotes } from "@/lib/ollama";
 import { isNotesBusy, NotesContext, type NotesJob } from "./notes";
 import { getSettings } from "./settings";
 
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const errMsg = errorMessage;
 
 /**
  * Runs one notes job at a time, in the browser (WebLLM; the engine and loaded

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { errorMessage } from "@/lib/errors";
 import { decodeMediaFile, TARGET_SAMPLE_RATE, type DecodedAudio } from "@/lib/audio";
 import { appendSegments, createLecture, db, resetTranscript } from "@/lib/db";
 import { probeWebGpu } from "@/lib/env";
@@ -12,7 +13,7 @@ import { JobContext, lectureLockName, resolveDevice, resolveModel, type Job } fr
 import { useNotes } from "./notes";
 import { getSettings } from "./settings";
 
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const errMsg = errorMessage;
 
 /** Hold a Web Lock for the job's lifetime so other tabs know it's still running. */
 function withLectureLock<T>(id: string, fn: () => Promise<T>): Promise<T> {

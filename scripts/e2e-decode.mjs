@@ -83,7 +83,8 @@ const results = [];
 let failed = false;
 
 async function run(name, expect, load) {
-  const page = await browser.newPage();
+  // Block the service worker: always test the fresh build, not a cached one.
+  const page = await browser.newPage({ serviceWorkers: "block" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(URL_);

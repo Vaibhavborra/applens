@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { AppUpdate } from "@/components/AppUpdate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Card } from "@/components/ui";
@@ -10,6 +11,7 @@ import { Link } from "./Link";
 import { HomePage } from "./pages/HomePage";
 import { LecturePage } from "./pages/LecturePage";
 import { useRoute } from "./router";
+import { useOnline } from "./useOnline";
 
 export function App() {
   return (
@@ -36,6 +38,7 @@ async function sweepInterrupted() {
 
 function Shell() {
   const route = useRoute();
+  const online = useOnline();
 
   useEffect(() => {
     void sweepInterrupted();
@@ -49,7 +52,16 @@ function Shell() {
             <img src="/favicon.svg" alt="" className="size-7" />
             <span className="font-semibold tracking-tight">Lecture Notes AI</span>
           </Link>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {!online && (
+              <span
+                className="rounded-full bg-zinc-200 px-2.5 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                title="Saved lectures and models you've already used keep working offline."
+                data-testid="offline-badge"
+              >
+                Offline
+              </span>
+            )}
             <ThemeToggle />
           </div>
         </div>
@@ -73,6 +85,7 @@ function Shell() {
           </Card>
         )}
       </main>
+      <AppUpdate />
     </div>
   );
 }

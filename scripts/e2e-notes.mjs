@@ -45,6 +45,7 @@ try {
 
   const ctx = await chromium.launchPersistentContext(join(tmpdir(), "lna-e2e-profile"), {
     channel: "chrome",
+    serviceWorkers: "block", // always test the fresh build, not a cached one
     headless: !args.includes("--headed"),
     viewport: { width: 1100, height: 1000 },
     args: [

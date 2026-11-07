@@ -1,4 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import { errorMessage } from "@/lib/errors";
 import { useEffect, useState } from "react";
 import { BrowserSupportBanner } from "@/components/BrowserSupportBanner";
 import { DropZone } from "@/components/DropZone";
@@ -33,7 +34,7 @@ export function HomePage() {
     setError(null);
     start(file).then(
       (id) => navigate(`/lecture/${id}`),
-      (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
+      (e: unknown) => setError(errorMessage(e)),
     );
   };
 

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { errorMessage } from "@/lib/errors";
 import { getEmbedder } from "@/lib/embed-client";
 import { indexLecture } from "@/lib/search-index";
 
@@ -39,8 +40,7 @@ export function startIndexing(lectureId: string): void {
   indexLecture(lectureId, embedder, (done, total) => report({ done, total }))
     .then(
       () => set(lectureId, DONE),
-      (e: unknown) =>
-        set(lectureId, { kind: "error", message: e instanceof Error ? e.message : String(e) }),
+      (e: unknown) => set(lectureId, { kind: "error", message: errorMessage(e) }),
     )
     .finally(off);
 }

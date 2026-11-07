@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phase 8 done (exports, flashcard study mode, polish). Phase 9 (stretch goals) next. See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phases 1–8 done; Phase 9 in progress (Ollama notes and offline mode done). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -91,6 +91,12 @@ On the 4-topic test lecture, paraphrased questions ("what happens when two keys 
 From a lecture's **Export** menu: notes as Markdown (timestamps inline), flashcards as a two-column CSV that Anki imports directly (File → Import, comma-separated; the source timestamp is appended to each answer), the transcript as `.txt`, and subtitles as `.srt` (non-overlapping cues, wrapped lines). **Study mode** shows one card at a time: Space reveals, 1/← = again (the card returns three cards later), 2/→ = got it; the summary offers a review of only the missed cards.
 
 Light, dark and system themes (toggle in the header, applied before first paint), a browser-support banner when WebGPU or storage is missing, and an error boundary per page round it out.
+
+## Offline (PWA)
+
+The app is installable and works offline after the first visit. A service worker ([vite-plugin-pwa](https://vite-pwa-org.netlify.app/)) precaches the app shell (~1.5 MB). The in-browser notes engine (~12 MB of JS) and version-pinned CDN files (ffmpeg core, onnxruntime wasm) are cached the first time they're used, and the models cache themselves. So anything you've used once (a Whisper model, the search model, a notes model) keeps working offline; a model that was never downloaded says it needs a connection. Saved lectures live in IndexedDB as before.
+
+Updates are never applied mid-job: when a new version is deployed, a toast offers **Reload** (disabled while a transcription or notes job is running). `node scripts/e2e-offline.mjs <file>` checks all of this with the server stopped and DNS blocked. The other e2e scripts block the service worker so they always test the fresh build.
 
 ## Stack
 

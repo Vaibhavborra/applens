@@ -1,4 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import { errorMessage } from "@/lib/errors";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getPassages, type Lecture, type StoredPassage } from "@/lib/db";
 import { getEmbedder } from "@/lib/embed-client";
@@ -307,7 +308,7 @@ function useSemanticResults(
           if (alive) {
             setState({
               key,
-              value: { status: "error", message: e instanceof Error ? e.message : String(e) },
+              value: { status: "error", message: errorMessage(e) },
             });
           }
         },
