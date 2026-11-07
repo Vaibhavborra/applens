@@ -1,11 +1,24 @@
 import { useEffect, useMemo, useRef } from "react";
 import { computePeaks } from "@/lib/pcm";
+import { nudgeMedia, seekMedia } from "@/lib/playback";
+import { formatTimestamp } from "@/lib/time";
 
 const PEAK_BUCKETS = 4000;
 
-/** Static min/max waveform. Colour comes from CSS `color` (currentColor). */
-export function Waveform({ pcm, className = "" }: { pcm: Float32Array; className?: string }) {
+interface Props {
+  pcm: Float32Array;
+  /** Duration of `pcm` in seconds. */
+  durationSec: number;
+  /** When given, shows a playhead and click/keyboard seeking. */
+  media?: HTMLMediaElement | null;
+  className?: string;
+}
+
+/** Min/max waveform. Colour comes from CSS `color` (currentColor). */
+export function Waveform({ pcm, durationSec, media = null, className = "" }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const playhead = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const peaks = useMemo(() => computePeaks(pcm, PEAK_BUCKETS), [pcm]);
 
   useEffect(() => {
@@ -53,12 +66,85 @@ export function Waveform({ pcm, className = "" }: { pcm: Float32Array; className
     return () => ro.disconnect();
   }, [peaks]);
 
+  // Move the playhead with a style write per frame: no React re-renders.
+  useEffect(() => {
+    const head = playhead.current;
+    if (!media || !head) return;
+    let raf = 0;
+    const place = () => {
+      const ratio = durationSec > 0 ? Math.min(1, media.currentTime / durationSec) : 0;
+      head.style.left = `${ratio * 100}%`;
+      box.current?.setAttribute("aria-valuenow", String(Math.round(media.currentTime)));
+      box.current?.setAttribute("aria-valuetext", formatTimestamp(media.currentTime));
+    };
+    const loop = () => {
+      place();
+      raf = requestAnimationFrame(loop);
+    };
+    const start = () => {
+      cancelAnimationFrame(raf);
+      loop();
+    };
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      place();
+    };
+    media.addEventListener("play", start);
+    media.addEventListener("pause", stop);
+    media.addEventListener("seeked", place);
+    media.addEventListener("ended", stop);
+    if (media.paused) place();
+    else start();
+    return () => {
+      cancelAnimationFrame(raf);
+      media.removeEventListener("play", start);
+      media.removeEventListener("pause", stop);
+      media.removeEventListener("seeked", place);
+      media.removeEventListener("ended", stop);
+    };
+  }, [media, durationSec]);
+
+  const seekTo = (ratio: number) => {
+    if (media) seekMedia(media, Math.max(0, Math.min(1, ratio)) * durationSec);
+  };
+
+  // Same element tree with or without media, so the canvas isn't recreated
+  // (the draw effect only re-runs when the peaks change).
+  const interactive = media
+    ? {
+        role: "slider",
+        tabIndex: 0,
+        "aria-label": "Seek",
+        "aria-valuemin": 0,
+        "aria-valuemax": Math.round(durationSec),
+        onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          seekTo((e.clientX - r.left) / r.width);
+        },
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+            e.preventDefault();
+            e.stopPropagation();
+            nudgeMedia(media, e.key === "ArrowLeft" ? -5 : 5);
+          }
+        },
+      }
+    : { role: "img", "aria-label": "Audio waveform" };
+
   return (
-    <canvas
-      ref={canvas}
-      aria-label="Audio waveform"
-      role="img"
-      className={`block w-full ${className}`}
-    />
+    <div
+      ref={box}
+      {...interactive}
+      data-testid="waveform"
+      className={`relative rounded outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${media ? "cursor-pointer" : ""} ${className}`}
+    >
+      <canvas ref={canvas} aria-hidden className="block h-full w-full" />
+      <div
+        ref={playhead}
+        aria-hidden
+        className={`pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-zinc-900 dark:bg-white ${media ? "" : "hidden"}`}
+        style={{ left: "0%" }}
+      />
+    </div>
   );
 }

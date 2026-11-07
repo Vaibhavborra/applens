@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phase 3 (on-device Whisper transcription with live timestamped transcript). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phase 4 (player sync: click-to-seek, live highlight, waveform scrubbing). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -16,6 +16,7 @@ npm run format       # Prettier
 npm run build        # production build → dist/
 npm run e2e          # decode smoke test in your installed Chrome (playwright-core)
 node scripts/e2e-transcribe.mjs <file> [--device=wasm] [--model=fast|balanced|best] [--expect=word,word]
+node scripts/e2e-player.mjs <speech-file>   # seek, highlight, shortcuts, fallback playback
 ```
 
 ## Deploy (Cloudflare Pages)
@@ -45,6 +46,10 @@ Whisper runs in a Web Worker via Transformers.js, on WebGPU when the browser has
 | Best     | whisper-large-v3-turbo | 564 MB (fp16)   | —             | ~2× realtime                 |
 
 Weights are cached in the browser after the first download. WASM (q8) ran Fast at ~6.7× realtime on the dev machine. Model and ONNX Runtime wasm files come from Hugging Face / jsDelivr (both CORS + CORP friendly, so they work under COEP).
+
+## Playback
+
+The original file plays in a `<video>` or `<audio>` element (audio-only video containers are detected and shown as audio). If the browser can't play the format, a WAV is built from the decoded audio so every file that decodes also plays. Click a transcript line or the waveform to seek; the line under the playhead is highlighted and kept in view (paused for a few seconds after you scroll yourself). Shortcuts: Space play/pause, ←/→ ±5 s.
 
 ## Stack
 

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
+import { MediaPlayer } from "@/components/MediaPlayer";
 import { ModelPicker } from "@/components/ModelPicker";
 import { Steps, type StepView } from "@/components/Steps";
 import { TranscriptView } from "@/components/TranscriptView";
 import { Waveform } from "@/components/Waveform";
-import type { DecodeProgress } from "@/lib/audio";
+import { TARGET_SAMPLE_RATE, type DecodeProgress } from "@/lib/audio";
 import { detectCapabilities, forcedDevice, probeWebGpu } from "@/lib/env";
 import { formatBytes } from "@/lib/format";
 import {
@@ -16,6 +17,7 @@ import {
   type ModelId,
 } from "@/lib/models";
 import { formatTimestamp } from "@/lib/time";
+import { useActiveSegment, useIsPlaying, useMediaElement, usePlayerShortcuts } from "./usePlayback";
 import { useTranscriptionJob, type Job } from "./useTranscriptionJob";
 
 const MODEL_KEY = "lna.model";
@@ -90,7 +92,8 @@ export function App() {
           <DropZone onFile={onFile} disabled={busy} />
         </div>
 
-        {job && <JobView job={job} onCancel={cancel} />}
+        {/* key: a new file resets player state (fallback, element kind) */}
+        {job && <JobView key={job.id} job={job} onCancel={cancel} />}
 
         <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Browser support</h2>
@@ -204,6 +207,10 @@ function JobView({ job, onCancel }: { job: Job; onCancel: () => void }) {
   const audio = job.decode.audio;
   const transcribing = job.transcribe.status === "active";
   const showTranscript = job.transcribe.status !== "pending";
+  const { media, mediaRef, seek } = useMediaElement();
+  const playing = useIsPlaying(media);
+  const active = useActiveSegment(media, job.segments);
+  usePlayerShortcuts(media);
 
   return (
     <>
@@ -224,15 +231,6 @@ function JobView({ job, onCancel }: { job: Job; onCancel: () => void }) {
           )}
         </div>
         <Steps steps={buildSteps(job)} />
-        {audio && (
-          <div
-            data-testid="decode-result"
-            data-method={audio.method}
-            data-duration={audio.durationSec}
-          >
-            <Waveform pcm={audio.pcm} className="mt-5 h-16 text-indigo-500 dark:text-indigo-400" />
-          </div>
-        )}
         {job.decode.status === "error" && (
           <p className="sr-only" data-testid="decode-error">
             Couldn't read “{job.file.name}”: {job.decode.error}
@@ -240,16 +238,52 @@ function JobView({ job, onCancel }: { job: Job; onCancel: () => void }) {
         )}
       </Card>
 
+      {job.decode.status !== "error" && (
+        <Card>
+          <MediaPlayer
+            file={job.file}
+            fallbackPcm={audio?.pcm}
+            sampleRate={TARGET_SAMPLE_RATE}
+            mediaRef={mediaRef}
+          />
+          {audio && (
+            <div
+              data-testid="decode-result"
+              data-method={audio.method}
+              data-duration={audio.durationSec}
+            >
+              <Waveform
+                pcm={audio.pcm}
+                durationSec={audio.durationSec}
+                media={media}
+                className="mt-4 h-16 text-indigo-500 dark:text-indigo-400"
+              />
+            </div>
+          )}
+        </Card>
+      )}
+
       {showTranscript && (
         <Card>
           <h2
-            className="mb-3 text-sm font-medium text-zinc-500 dark:text-zinc-400"
+            className="mb-3 flex items-baseline justify-between text-sm font-medium text-zinc-500 dark:text-zinc-400"
             data-testid="transcript-status"
             data-status={job.transcribe.status}
           >
             Transcript
+            {media && job.segments.length > 0 && (
+              <span className="text-xs font-normal">
+                Click a line to jump there · Space play/pause · ←/→ 5 s
+              </span>
+            )}
           </h2>
-          <TranscriptView segments={job.segments} live={transcribing} />
+          <TranscriptView
+            segments={job.segments}
+            live={transcribing}
+            active={active}
+            follow={playing}
+            onSeek={media ? (t) => seek(t) : undefined}
+          />
         </Card>
       )}
     </>
