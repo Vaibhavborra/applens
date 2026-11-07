@@ -1,33 +1,63 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DropZone } from "@/components/DropZone";
-import { ProgressBar } from "@/components/ProgressBar";
+import { ModelPicker } from "@/components/ModelPicker";
+import { Steps, type StepView } from "@/components/Steps";
+import { TranscriptView } from "@/components/TranscriptView";
 import { Waveform } from "@/components/Waveform";
-import { decodeMediaFile, type DecodedAudio, type DecodeProgress } from "@/lib/audio";
-import { detectCapabilities } from "@/lib/env";
+import type { DecodeProgress } from "@/lib/audio";
+import { detectCapabilities, forcedDevice, probeWebGpu } from "@/lib/env";
 import { formatBytes } from "@/lib/format";
+import {
+  getModel,
+  isModelId,
+  pickVariant,
+  type Device,
+  type GpuInfo,
+  type ModelId,
+} from "@/lib/models";
 import { formatTimestamp } from "@/lib/time";
+import { useTranscriptionJob, type Job } from "./useTranscriptionJob";
 
-type State =
-  | { kind: "idle" }
-  | { kind: "decoding"; file: File; progress: DecodeProgress }
-  | { kind: "ready"; file: File; audio: DecodedAudio }
-  | { kind: "error"; file: File; message: string };
+const MODEL_KEY = "lna.model";
+
+function loadSavedModel(): ModelId {
+  try {
+    const v = localStorage.getItem(MODEL_KEY);
+    if (isModelId(v)) return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return "fast";
+}
 
 export function App() {
   const [caps] = useState(detectCapabilities);
-  const [state, setState] = useState<State>({ kind: "idle" });
+  const [gpu, setGpu] = useState<GpuInfo | null>(null);
+  const [model, setModel] = useState<ModelId>(loadSavedModel);
+  const { job, start, cancel, busy } = useTranscriptionJob();
 
-  const handleFile = async (file: File) => {
-    setState({ kind: "decoding", file, progress: { stage: "reading" } });
+  useEffect(() => {
+    void probeWebGpu().then(setGpu);
+  }, []);
+
+  const device = resolveDevice(gpu);
+  const effectiveModel = resolveModel(model, device, gpu);
+
+  const chooseModel = (id: ModelId) => {
+    setModel(id);
     try {
-      const audio = await decodeMediaFile(file, (progress) =>
-        setState({ kind: "decoding", file, progress }),
-      );
-      setState({ kind: "ready", file, audio });
-    } catch (err) {
-      console.error(err);
-      setState({ kind: "error", file, message: err instanceof Error ? err.message : String(err) });
+      localStorage.setItem(MODEL_KEY, id);
+    } catch {
+      /* storage unavailable */
     }
+  };
+
+  // The GPU probe usually resolves in a few ms, but a file can arrive first; wait for it.
+  const onFile = (file: File) => {
+    void probeWebGpu().then((g) => {
+      const d = resolveDevice(g);
+      return start(file, { model: resolveModel(model, d, g), device: d, f16: g.f16 });
+    });
   };
 
   return (
@@ -47,25 +77,29 @@ export function App() {
           Everything runs on your device. Your audio never leaves the browser.
         </p>
 
-        <div className="mt-8">
-          <DropZone onFile={(f) => void handleFile(f)} disabled={state.kind === "decoding"} />
+        <div className="mt-8 space-y-5">
+          {gpu && (
+            <ModelPicker
+              value={effectiveModel}
+              onChange={chooseModel}
+              device={device}
+              gpu={gpu}
+              disabled={busy}
+            />
+          )}
+          <DropZone onFile={onFile} disabled={busy} />
         </div>
 
-        {state.kind === "decoding" && <Decoding file={state.file} progress={state.progress} />}
-        {state.kind === "ready" && <Decoded file={state.file} audio={state.audio} />}
-        {state.kind === "error" && (
-          <Card>
-            <p className="font-medium text-red-600 dark:text-red-400" data-testid="decode-error">
-              Couldn't read “{state.file.name}”
-            </p>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{state.message}</p>
-          </Card>
-        )}
+        {job && <JobView job={job} onCancel={cancel} />}
 
         <section className="mt-10 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Browser support</h2>
           <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-            <Capability ok={caps.webgpu} label="WebGPU" hint="fast transcription + AI notes" />
+            <Capability
+              ok={gpu?.webgpu ?? false}
+              label="WebGPU"
+              hint={gpu === null ? "checking…" : "fast transcription + AI notes"}
+            />
             <Capability
               ok={caps.crossOriginIsolated}
               label="Cross-origin isolated"
@@ -79,62 +113,146 @@ export function App() {
   );
 }
 
-function describeProgress(p: DecodeProgress): { label: string; value?: number } {
-  switch (p.stage) {
+function resolveDevice(gpu: GpuInfo | null): Device {
+  return forcedDevice() ?? (gpu?.webgpu ? "webgpu" : "wasm");
+}
+
+/** Fall back if the saved choice can't run here (e.g. "best" without WebGPU). */
+function resolveModel(model: ModelId, device: Device, gpu: GpuInfo | null): ModelId {
+  return gpu && !pickVariant(getModel(model), device, gpu) ? "fast" : model;
+}
+
+function decodeDetail(p: DecodeProgress | undefined): { detail: string; progress?: number } {
+  switch (p?.stage) {
+    case undefined:
     case "reading":
-      return { label: "Reading file…" };
+      return { detail: "Reading file…" };
     case "decoding":
-      return { label: "Decoding audio…" };
+      return { detail: "Decoding…" };
     case "loading":
       return {
-        label: `This format needs ffmpeg. Downloading converter (${formatBytes(p.received)} / ${formatBytes(p.total)}, first time only)…`,
-        value: p.received / p.total,
+        detail: `Downloading ffmpeg ${formatBytes(p.received)} / ${formatBytes(p.total)} (first time only)`,
+        progress: p.received / p.total,
       };
     case "converting":
       return {
-        label: `Extracting audio with ffmpeg… ${Math.round(p.ratio * 100)}%`,
-        value: p.ratio,
+        detail: `Extracting audio with ffmpeg ${Math.round(p.ratio * 100)}%`,
+        progress: p.ratio,
       };
   }
 }
 
-function Decoding({ file, progress }: { file: File; progress: DecodeProgress }) {
-  const { label, value } = describeProgress(progress);
-  return (
-    <Card>
-      <p className="truncate font-medium">{file.name}</p>
-      <p className="mt-1 mb-3 text-sm text-zinc-500 dark:text-zinc-400">{label}</p>
-      <ProgressBar label={label} value={value} />
-    </Card>
-  );
+function buildSteps(job: Job): StepView[] {
+  const { decode, load, transcribe } = job;
+  const audio = decode.audio;
+  const d = decodeDetail(decode.progress);
+
+  const loadDetail =
+    load.status === "error"
+      ? load.error
+      : load.info
+        ? `${load.info.device === "webgpu" ? "WebGPU" : "WASM"} · ${load.info.dtype}`
+        : load.total > 0
+          ? `${formatBytes(load.loaded)} / ${formatBytes(load.total)}`
+          : "Starting…";
+
+  let tDetail: string | undefined;
+  if (transcribe.status === "active" && transcribe.total > 0) {
+    const eta =
+      transcribe.etaMs !== undefined ? ` · ~${formatTimestamp(transcribe.etaMs / 1000)} left` : "";
+    tDetail = `${Math.round((transcribe.done / transcribe.total) * 100)}%${eta}`;
+  } else if (transcribe.status === "done" && transcribe.ms !== undefined && audio) {
+    const speed = audio.durationSec / (transcribe.ms / 1000);
+    tDetail = `${formatTimestamp(transcribe.ms / 1000)} · ${speed.toFixed(1)}× realtime`;
+  } else if (transcribe.cancelled) {
+    tDetail = "Cancelled";
+  } else if (transcribe.error) {
+    tDetail = transcribe.error;
+  }
+
+  return [
+    {
+      id: "decode",
+      label: "Decoding audio",
+      status: decode.status,
+      detail:
+        decode.status === "error"
+          ? decode.error
+          : audio
+            ? `${formatTimestamp(audio.durationSec)} · ${audio.method === "native" ? "browser" : "ffmpeg.wasm"}`
+            : d.detail,
+      progress: d.progress,
+    },
+    {
+      id: "model",
+      label: "Loading speech model",
+      status: load.status,
+      detail: loadDetail,
+      progress: load.total > 0 ? load.loaded / load.total : undefined,
+    },
+    {
+      id: "transcribe",
+      label: "Transcribing",
+      status: transcribe.status,
+      detail: tDetail,
+      progress: transcribe.total > 0 ? transcribe.done / transcribe.total : undefined,
+    },
+  ];
 }
 
-function Decoded({ file, audio }: { file: File; audio: DecodedAudio }) {
-  return (
-    <Card>
-      <div data-testid="decode-result" data-method={audio.method} data-duration={audio.durationSec}>
-        <p className="truncate font-medium">{file.name}</p>
-        <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-          <Stat label="Duration" value={formatTimestamp(audio.durationSec)} />
-          <Stat label="File size" value={formatBytes(file.size)} />
-          <Stat
-            label="Decoded with"
-            value={`${audio.method === "native" ? "Browser" : "ffmpeg.wasm"} · ${(audio.decodeMs / 1000).toFixed(1)}s`}
-          />
-          <Stat label="PCM" value={`16 kHz mono · ${formatBytes(audio.pcm.byteLength)}`} />
-        </dl>
-        <Waveform pcm={audio.pcm} className="mt-5 h-24 text-indigo-500 dark:text-indigo-400" />
-      </div>
-    </Card>
-  );
-}
+function JobView({ job, onCancel }: { job: Job; onCancel: () => void }) {
+  const audio = job.decode.audio;
+  const transcribing = job.transcribe.status === "active";
+  const showTranscript = job.transcribe.status !== "pending";
 
-function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-zinc-500 dark:text-zinc-400">{label}</dt>
-      <dd className="font-medium tabular-nums">{value}</dd>
-    </div>
+    <>
+      <Card>
+        <div className="mb-4 flex items-center gap-3">
+          <p className="min-w-0 flex-1 truncate font-medium">{job.file.name}</p>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            {formatBytes(job.file.size)}
+          </span>
+          {transcribing && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-zinc-300 px-2.5 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+        <Steps steps={buildSteps(job)} />
+        {audio && (
+          <div
+            data-testid="decode-result"
+            data-method={audio.method}
+            data-duration={audio.durationSec}
+          >
+            <Waveform pcm={audio.pcm} className="mt-5 h-16 text-indigo-500 dark:text-indigo-400" />
+          </div>
+        )}
+        {job.decode.status === "error" && (
+          <p className="sr-only" data-testid="decode-error">
+            Couldn't read “{job.file.name}”: {job.decode.error}
+          </p>
+        )}
+      </Card>
+
+      {showTranscript && (
+        <Card>
+          <h2
+            className="mb-3 text-sm font-medium text-zinc-500 dark:text-zinc-400"
+            data-testid="transcript-status"
+            data-status={job.transcribe.status}
+          >
+            Transcript
+          </h2>
+          <TranscriptView segments={job.segments} live={transcribing} />
+        </Card>
+      )}
+    </>
   );
 }
 
