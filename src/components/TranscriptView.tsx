@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
+import { speakerName } from "@/lib/speakers";
 import { formatTimestamp } from "@/lib/time";
+import { speakerColor } from "./speaker-colors";
 import type { Segment } from "@/types/transcript";
 
 interface Props {
@@ -11,12 +13,21 @@ interface Props {
   /** Follow the active line (true while media is playing). */
   follow?: boolean;
   onSeek?: ((t: number) => void) | undefined;
+  /** Show speaker names where the speaker changes (null: speakers not identified, or just one). */
+  speakerNames?: readonly string[] | null;
 }
 
 /** After the user scrolls manually, don't auto-scroll for this long. */
 const USER_SCROLL_GRACE_MS = 4000;
 
-export function TranscriptView({ segments, live, active = -1, follow = false, onSeek }: Props) {
+export function TranscriptView({
+  segments,
+  live,
+  active = -1,
+  follow = false,
+  onSeek,
+  speakerNames = null,
+}: Props) {
   const box = useRef<HTMLDivElement>(null);
   const stickBottom = useRef(true);
   const lastUserScroll = useRef(0);
@@ -76,8 +87,18 @@ export function TranscriptView({ segments, live, active = -1, follow = false, on
       <ol className="space-y-0.5">
         {segments.map((s, i) => {
           const isActive = i === active;
+          const speaker = speakerNames ? s.speaker : undefined;
+          const newSpeaker = speaker !== undefined && speaker !== segments[i - 1]?.speaker;
           return (
-            <li key={i} data-index={i}>
+            <li key={i} data-index={i} data-speaker={speaker}>
+              {newSpeaker && (
+                <p
+                  className={`px-2 pt-2 text-xs font-semibold ${speakerColor(speaker)}`}
+                  data-testid="speaker-label"
+                >
+                  {speakerName(speaker, speakerNames ?? undefined)}
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => onSeek?.(s.start)}

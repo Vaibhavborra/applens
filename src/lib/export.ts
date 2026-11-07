@@ -1,4 +1,5 @@
 import type { Card } from "./notes/types";
+import { speakerName } from "./speakers";
 import { formatTimestamp } from "./time";
 import type { Segment } from "@/types/transcript";
 
@@ -16,9 +17,20 @@ export function safeFileName(title: string, fallback = "lecture"): string {
   return s || fallback;
 }
 
-/** Plain transcript: one "[m:ss] text" line per segment. */
-export function transcriptToTxt(segments: readonly Segment[], title?: string): string {
-  const lines = segments.map((s) => `[${formatTimestamp(s.start)}] ${s.text.trim()}`);
+/** "Name: " for a segment when speakers are shown (names given), else "". */
+function speakerPrefix(s: Segment, names: readonly string[] | null): string {
+  return names && s.speaker !== undefined ? `${speakerName(s.speaker, names)}: ` : "";
+}
+
+/** Plain transcript: one "[m:ss] text" line per segment, with speaker names if given. */
+export function transcriptToTxt(
+  segments: readonly Segment[],
+  title?: string,
+  speakerNames: readonly string[] | null = null,
+): string {
+  const lines = segments.map(
+    (s) => `[${formatTimestamp(s.start)}] ${speakerPrefix(s, speakerNames)}${s.text.trim()}`,
+  );
   return (title ? `${title}\n\n` : "") + lines.join("\n") + "\n";
 }
 
@@ -37,14 +49,20 @@ export function srtTime(sec: number): string {
  * `minSec`; long lines are wrapped at ~42 chars (two lines per cue max is a
  * convention players handle, more lines are fine too).
  */
-export function transcriptToSrt(segments: readonly Segment[], minSec = 0.5): string {
+export function transcriptToSrt(
+  segments: readonly Segment[],
+  minSec = 0.5,
+  speakerNames: readonly string[] | null = null,
+): string {
   const cues = segments
     .filter((s) => s.text.trim())
     .map((s, i, all) => {
       const next = all[i + 1];
       let end = Math.max(s.end, s.start + minSec);
       if (next && end > next.start) end = Math.max(s.start + 0.001, next.start);
-      return `${i + 1}\n${srtTime(s.start)} --> ${srtTime(end)}\n${wrap(s.text.trim(), 42)}\n`;
+      // Name the speaker where it changes (subtitle convention).
+      const prefix = s.speaker !== all[i - 1]?.speaker ? speakerPrefix(s, speakerNames) : "";
+      return `${i + 1}\n${srtTime(s.start)} --> ${srtTime(end)}\n${wrap(prefix + s.text.trim(), 42)}\n`;
     });
   return cues.join("\n");
 }

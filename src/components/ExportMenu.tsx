@@ -1,4 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
+import { shownSpeakerNames } from "@/lib/speakers";
 import { useEffect, useRef, useState } from "react";
 import { db, getFlashcards, type Lecture } from "@/lib/db";
 import {
@@ -72,7 +73,7 @@ export function ExportMenu({
       run: () =>
         downloadText(
           `${base} - transcript.txt`,
-          transcriptToTxt(segments, lecture.title),
+          transcriptToTxt(segments, lecture.title, shownSpeakerNames(lecture)),
           "text/plain",
         ),
     },
@@ -81,7 +82,12 @@ export function ExportMenu({
       label: "Subtitles",
       hint: ".srt",
       disabled: !hasTranscript,
-      run: () => downloadText(`${base}.srt`, transcriptToSrt(segments), "application/x-subrip"),
+      run: () =>
+        downloadText(
+          `${base}.srt`,
+          transcriptToSrt(segments, 0.5, shownSpeakerNames(lecture)),
+          "application/x-subrip",
+        ),
     },
   ];
 

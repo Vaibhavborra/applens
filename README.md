@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phases 1–8 done; Phase 9 in progress (Ollama notes, offline mode and live microphone done; speaker labels next). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: all phases done (1–9). See [PLAN.md](PLAN.md) for the roadmap. Not yet deployed.
 
 ## Develop
 
@@ -97,6 +97,16 @@ Light, dark and system themes (toggle in the header, applied before first paint)
 **Record live** on the home page transcribes from the microphone while the lecture happens. An AudioWorklet captures 16 kHz mono audio; a segmenter cuts it into chunks at the first real pause (≥0.25 s of quiet) after 8 s, or at the quietest point by 25 s, so words aren't split and text appears every few seconds. Each chunk goes through the same Whisper worker as files, with its time offset and the previous line for sentence context. On **Stop**, the last chunk is transcribed, the recording is saved as a 16 kHz WAV (~115 MB/hour) if "save the recording" is on, and the lecture is indexed for search (and gets notes if auto-notes is on).
 
 If transcription is slower than real time, the transcript falls behind and catches up after Stop; the page says how far behind it is. Closing the tab while recording asks for confirmation. `node scripts/e2e-live.mjs <file.wav> --expect=word,word` uses Chrome's fake microphone to "speak" a file into the app.
+
+## Speaker labels
+
+**Identify speakers** in the Transcript tab labels each line with who's talking (e.g. lecturer vs. questions from the room); speakers can be renamed, and names go into the TXT and SRT exports. It runs on the CPU with [WeSpeaker ResNet34](https://huggingface.co/onnx-community/wespeaker-voxceleb-resnet34-LM) (the embedding model pyannote uses, 6.7 MB at q8):
+
+1. a voice print per transcript line of at least 1 s, from its voiced frames only (pauses inside a line otherwise produce prints that match nobody); lines with under 0.8 s of speech are skipped;
+2. average-linkage clustering on cosine similarity with a threshold of 0.45, so the number of speakers comes from the data;
+3. skipped lines take the speaker of the nearest line in time.
+
+Measured on our fixtures: same voice ≥ 0.87 similarity, different voices ≤ 0.22; a two-voice dialogue was labelled 16/17 lines correctly (the miss is a line spanning a speaker change: labels are per line), and three single-speaker lectures (1–5.6 min) came out as one speaker. Those fixtures are synthetic voices; real rooms (distant mics, similar voices, crosstalk) will be harder. WavLM-SV was tried first: its q8 build gave unusable embeddings and fp32 is 400 MB. `node scripts/e2e-speakers.mjs <dialog.wav> <truth.json> <one-speaker.wav>...` checks it.
 
 ## Offline (PWA)
 

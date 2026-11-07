@@ -19,6 +19,8 @@ import { formatTimestamp } from "@/lib/time";
 import { useJob, type Job } from "../job";
 import { isLiveBusy, useLive } from "../live";
 import { LiveRecordingCard } from "@/components/LiveRecordingCard";
+import { SpeakerControls } from "@/components/SpeakerControls";
+import { shownSpeakerNames } from "@/lib/speakers";
 import { useDocumentTitle } from "../useDocumentTitle";
 import { useNotes } from "../notes";
 import { Link } from "../Link";
@@ -258,7 +260,13 @@ function LectureView({
                     </span>
                   )}
                 </h2>
+                {lecture.status === "done" && segments.length > 0 && !running && (
+                  <div className="mb-3">
+                    <SpeakerControls lecture={lecture} disabled={busy} />
+                  </div>
+                )}
                 <TranscriptView
+                  speakerNames={shownSpeakerNames(lecture)}
                   segments={segments}
                   live={transcribing || recording}
                   active={source ? active : -1}

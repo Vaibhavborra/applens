@@ -25,6 +25,10 @@ export interface Lecture {
   transcribeMs?: number;
   /** Embedding model the search index was built with; absent = not indexed. */
   searchModel?: string;
+  /** Number of speakers found; absent = speakers not identified. */
+  speakerCount?: number;
+  /** User-given speaker names, by index ("" = default "Speaker N"). */
+  speakerNames?: string[];
 }
 
 export interface StoredSegment extends Segment {
@@ -131,6 +135,42 @@ export async function createLecture(
   return lecture;
 }
 
+/** Store a speaker index per segment (in transcript order) and the speaker count. */
+export async function saveSpeakers(
+  lectureId: string,
+  labels: readonly number[],
+  database: LectureDB = db,
+): Promise<void> {
+  await database.transaction("rw", database.lectures, database.segments, async () => {
+    const segments = await getSegments(lectureId, database);
+    if (segments.length !== labels.length) throw new Error("The transcript changed; try again.");
+    await database.segments.bulkUpdate(
+      segments.map((s, i) => ({ key: s.id!, changes: { speaker: labels[i]! } })),
+    );
+    await database.lectures.update(lectureId, {
+      speakerCount: labels.length ? Math.max(...labels) + 1 : 0,
+      speakerNames: [],
+    });
+  });
+}
+
+export async function renameSpeaker(
+  lectureId: string,
+  index: number,
+  name: string,
+  database: LectureDB = db,
+): Promise<void> {
+  await database.lectures
+    .where("id")
+    .equals(lectureId)
+    .modify((l) => {
+      const names = [...(l.speakerNames ?? [])];
+      while (names.length <= index) names.push("");
+      names[index] = name.trim();
+      l.speakerNames = names;
+    });
+}
+
 /** A lecture that starts without a file (live recording); media is attached when it stops. */
 export async function createRecordingLecture(
   opts: { title: string; fileName: string; model: ModelId; device: Device },
@@ -187,6 +227,8 @@ export async function resetTranscript(lectureId: string, database: LectureDB = d
           delete l.error;
           delete l.transcribeMs;
           delete l.searchModel;
+          delete l.speakerCount;
+          delete l.speakerNames;
         });
     },
   );

@@ -52,6 +52,30 @@ describe("srt", () => {
   });
 });
 
+describe("speaker names in exports", () => {
+  const two = [
+    { start: 0, end: 2, text: "Hello.", speaker: 0 },
+    { start: 2, end: 4, text: "More.", speaker: 0 },
+    { start: 4, end: 6, text: "A question?", speaker: 1 },
+  ];
+
+  it("prefixes TXT lines, and SRT cues where the speaker changes", () => {
+    expect(transcriptToTxt(two, undefined, ["Prof"])).toBe(
+      "[0:00] Prof: Hello.\n[0:02] Prof: More.\n[0:04] Speaker 2: A question?\n",
+    );
+    const cues = transcriptToSrt(two, 0.5, []).trim().split("\n\n");
+    expect(cues.map((c) => c.split("\n")[2])).toEqual([
+      "Speaker 1: Hello.",
+      "More.",
+      "Speaker 2: A question?",
+    ]);
+  });
+
+  it("leaves names out when speakers aren't shown", () => {
+    expect(transcriptToTxt(two)).toBe("[0:00] Hello.\n[0:02] More.\n[0:04] A question?\n");
+  });
+});
+
 describe("flashcardsToCsv", () => {
   it("quotes fields, escapes quotes and appends the source time", () => {
     const csv = flashcardsToCsv([
