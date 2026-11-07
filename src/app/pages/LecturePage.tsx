@@ -17,6 +17,8 @@ import { formatBytes, formatDate } from "@/lib/format";
 import { getModel } from "@/lib/models";
 import { formatTimestamp } from "@/lib/time";
 import { useJob, type Job } from "../job";
+import { isLiveBusy, useLive } from "../live";
+import { LiveRecordingCard } from "@/components/LiveRecordingCard";
 import { useDocumentTitle } from "../useDocumentTitle";
 import { useNotes } from "../notes";
 import { Link } from "../Link";
@@ -69,8 +71,12 @@ function LectureView({
   segments: Awaited<ReturnType<typeof getSegments>>;
   live: Job | null;
 }) {
-  const { job, busy, start, cancel } = useJob();
-  const running = live !== null && busy;
+  const { job, busy: jobBusy, start, cancel } = useJob();
+  const { session, liveBusy, stopLive } = useLive();
+  const rec = session?.lectureId === lecture.id ? session : null;
+  const recording = rec !== null && isLiveBusy(rec);
+  const busy = jobBusy || liveBusy;
+  const running = (live !== null && jobBusy) || recording;
   const transcribing = live?.transcribe.status === "active";
 
   const stored = useLiveQuery(
@@ -161,12 +167,14 @@ function LectureView({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <LectureStatusBadge lecture={lecture} job={job} />
+          <LectureStatusBadge lecture={lecture} job={job} recording={recording} />
           <ExportMenu lecture={lecture} segments={segments} />
         </div>
       </header>
 
       <StatusBanner lecture={lecture} live={live} canRerun={canRerun} onRerun={transcribeAgain} />
+
+      {rec && <LiveRecordingCard session={rec} onStop={stopLive} />}
 
       {live && (
         <Card>
@@ -194,7 +202,7 @@ function LectureView({
         </Card>
       )}
 
-      {!(live?.decode.status === "error") && (
+      {!(live?.decode.status === "error") && !recording && (
         <Card>
           {source ? (
             <MediaPlayer
@@ -252,7 +260,7 @@ function LectureView({
                 </h2>
                 <TranscriptView
                   segments={segments}
-                  live={transcribing}
+                  live={transcribing || recording}
                   active={source ? active : -1}
                   follow={playing && currentTab === "transcript"}
                   onSeek={seekTo}

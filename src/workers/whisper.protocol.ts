@@ -3,7 +3,16 @@ import type { Segment } from "@/types/transcript";
 
 export type WhisperRequest =
   | { type: "load"; model: ModelId; device: Device; f16: boolean }
-  | { type: "transcribe"; jobId: number; pcm: Float32Array; sampleRate: number }
+  | {
+      type: "transcribe";
+      jobId: number;
+      pcm: Float32Array;
+      sampleRate: number;
+      /** Live mode: where this PCM starts in the recording; segment times are shifted by it. */
+      offsetSec?: number;
+      /** Live mode: the previous chunk's last line, for sentence-case continuity. */
+      previousText?: string;
+    }
   | { type: "cancel"; jobId: number };
 
 export interface ReadyInfo {

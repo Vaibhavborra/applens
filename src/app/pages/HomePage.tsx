@@ -5,7 +5,7 @@ import { BrowserSupportBanner } from "@/components/BrowserSupportBanner";
 import { DropZone } from "@/components/DropZone";
 import { LectureList } from "@/components/LectureList";
 import { ModelPicker } from "@/components/ModelPicker";
-import { Card } from "@/components/ui";
+import { Button, Card } from "@/components/ui";
 import { db } from "@/lib/db";
 import { detectCapabilities } from "@/lib/env";
 import { getNotesModel } from "@/lib/llm-models";
@@ -14,6 +14,7 @@ import { estimateStorage, type StorageEstimate } from "@/lib/storage";
 import { resolveDevice, resolveModel, useJob } from "../job";
 import { navigate } from "../router";
 import { updateSettings, useSettings } from "../settings";
+import { useLive } from "../live";
 import { useDocumentTitle } from "../useDocumentTitle";
 import { useGpu } from "../useGpu";
 
@@ -21,7 +22,10 @@ export function HomePage() {
   const [caps] = useState(detectCapabilities);
   const gpu = useGpu();
   const settings = useSettings();
-  const { start, busy } = useJob();
+  const { start, busy: jobBusy } = useJob();
+  const { startLive, liveBusy } = useLive();
+  const busy = jobBusy || liveBusy;
+  const [startingLive, setStartingLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lectures = useLiveQuery(() => db.lectures.orderBy("createdAt").reverse().toArray(), []);
   const storage = useStorageEstimate(lectures?.length);
@@ -35,6 +39,18 @@ export function HomePage() {
     start(file).then(
       (id) => navigate(`/lecture/${id}`),
       (e: unknown) => setError(errorMessage(e)),
+    );
+  };
+
+  const onRecord = () => {
+    setError(null);
+    setStartingLive(true);
+    startLive().then(
+      (id) => navigate(`/lecture/${id}`),
+      (e: unknown) => {
+        setStartingLive(false);
+        setError(errorMessage(e));
+      },
     );
   };
 
@@ -59,6 +75,20 @@ export function HomePage() {
           />
         )}
         <DropZone onFile={onFile} disabled={busy} />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            onClick={onRecord}
+            disabled={busy || startingLive}
+            data-testid="record-live"
+            className="gap-2"
+          >
+            <span aria-hidden className="size-2.5 rounded-full bg-red-500" />
+            {startingLive ? "Starting microphone…" : "Record live"}
+          </Button>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            Transcribe from your microphone as the lecture happens.
+          </span>
+        </div>
         <label className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           <input
             type="checkbox"
@@ -91,7 +121,9 @@ export function HomePage() {
         )}
         {busy && (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            A lecture is being transcribed. You can add another when it finishes.
+            {liveBusy
+              ? "A live recording is running. You can add a file when it finishes."
+              : "A lecture is being transcribed. You can add another when it finishes."}
           </p>
         )}
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

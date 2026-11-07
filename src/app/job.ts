@@ -47,6 +47,12 @@ export function useJob(): JobApi {
 
 export const lectureLockName = (id: string) => `lna-lecture:${id}`;
 
+/** Hold a Web Lock for the job's lifetime so other tabs know it's still running. */
+export function withLectureLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  return locks ? locks.request(lectureLockName(id), fn) : fn();
+}
+
 export function resolveDevice(webgpu: boolean): Device {
   return forcedDevice() ?? (webgpu ? "webgpu" : "wasm");
 }

@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phases 1–8 done; Phase 9 in progress (Ollama notes and offline mode done). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phases 1–8 done; Phase 9 in progress (Ollama notes, offline mode and live microphone done; speaker labels next). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -91,6 +91,12 @@ On the 4-topic test lecture, paraphrased questions ("what happens when two keys 
 From a lecture's **Export** menu: notes as Markdown (timestamps inline), flashcards as a two-column CSV that Anki imports directly (File → Import, comma-separated; the source timestamp is appended to each answer), the transcript as `.txt`, and subtitles as `.srt` (non-overlapping cues, wrapped lines). **Study mode** shows one card at a time: Space reveals, 1/← = again (the card returns three cards later), 2/→ = got it; the summary offers a review of only the missed cards.
 
 Light, dark and system themes (toggle in the header, applied before first paint), a browser-support banner when WebGPU or storage is missing, and an error boundary per page round it out.
+
+## Live microphone
+
+**Record live** on the home page transcribes from the microphone while the lecture happens. An AudioWorklet captures 16 kHz mono audio; a segmenter cuts it into chunks at the first real pause (≥0.25 s of quiet) after 8 s, or at the quietest point by 25 s, so words aren't split and text appears every few seconds. Each chunk goes through the same Whisper worker as files, with its time offset and the previous line for sentence context. On **Stop**, the last chunk is transcribed, the recording is saved as a 16 kHz WAV (~115 MB/hour) if "save the recording" is on, and the lecture is indexed for search (and gets notes if auto-notes is on).
+
+If transcription is slower than real time, the transcript falls behind and catches up after Stop; the page says how far behind it is. Closing the tab while recording asks for confirmation. `node scripts/e2e-live.mjs <file.wav> --expect=word,word` uses Chrome's fake microphone to "speak" a file into the app.
 
 ## Offline (PWA)
 

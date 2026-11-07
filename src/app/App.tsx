@@ -6,6 +6,7 @@ import { Card } from "@/components/ui";
 import { markInterrupted } from "@/lib/db";
 import { lectureLockName } from "./job";
 import { JobProvider } from "./JobProvider";
+import { LiveProvider } from "./LiveProvider";
 import { NotesProvider } from "./NotesProvider";
 import { Link } from "./Link";
 import { HomePage } from "./pages/HomePage";
@@ -17,7 +18,9 @@ export function App() {
   return (
     <NotesProvider>
       <JobProvider>
-        <Shell />
+        <LiveProvider>
+          <Shell />
+        </LiveProvider>
       </JobProvider>
     </NotesProvider>
   );

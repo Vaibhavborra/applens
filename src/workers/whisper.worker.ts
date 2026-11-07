@@ -65,11 +65,17 @@ async function load(model: ModelId, device: Device, f16: boolean) {
   });
 }
 
-async function transcribe(jobId: number, pcm: Float32Array, sampleRate: number) {
+async function transcribe(
+  jobId: number,
+  pcm: Float32Array,
+  sampleRate: number,
+  offsetSec = 0,
+  initialText = "",
+) {
   if (!asr) throw new Error("Model not loaded");
   const t0 = performance.now();
   const windows = planWindows(pcm, sampleRate);
-  let previousText = "";
+  let previousText = initialText;
 
   for (let i = 0; i < windows.length; i++) {
     if (cancelledJob === jobId) {
@@ -96,6 +102,13 @@ async function transcribe(jobId: number, pcm: Float32Array, sampleRate: number) 
       segments = cleanSegments(segments, pcm, sampleRate, previousText);
       previousText = segments.at(-1)?.text ?? previousText;
     }
+    if (offsetSec) {
+      segments = segments.map((s) => ({
+        ...s,
+        start: s.start + offsetSec,
+        end: s.end + offsetSec,
+      }));
+    }
     post({ type: "progress", jobId, done: i + 1, total: windows.length, segments });
   }
   post({ type: "result", jobId, cancelled: false, ms: Math.round(performance.now() - t0) });
@@ -112,7 +125,7 @@ self.onmessage = (e: MessageEvent<WhisperRequest>) => {
   queue = queue.then(async () => {
     try {
       if (msg.type === "load") await load(msg.model, msg.device, msg.f16);
-      else await transcribe(msg.jobId, msg.pcm, msg.sampleRate);
+      else await transcribe(msg.jobId, msg.pcm, msg.sampleRate, msg.offsetSec, msg.previousText);
     } catch (err) {
       console.error(err);
       post({

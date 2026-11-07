@@ -62,12 +62,13 @@ export class WhisperClient {
     pcm: Float32Array,
     sampleRate: number,
     handlers: TranscribeHandlers,
+    live: { offsetSec: number; previousText: string } | null = null,
   ): { promise: Promise<TranscribeResult>; cancel: () => void } {
     const jobId = this.nextJob++;
     const copy = pcm.slice();
     const promise = new Promise<TranscribeResult>((resolve, reject) => {
       this.jobs.set(jobId, { ...handlers, resolve, reject });
-      this.send({ type: "transcribe", jobId, pcm: copy, sampleRate }, [copy.buffer]);
+      this.send({ type: "transcribe", jobId, pcm: copy, sampleRate, ...live }, [copy.buffer]);
     });
     return { promise, cancel: () => this.send({ type: "cancel", jobId }) };
   }
@@ -115,4 +116,11 @@ export class WhisperClient {
     this.worker?.terminate();
     this.worker = null;
   }
+}
+
+let shared: WhisperClient | null = null;
+
+/** One worker (and loaded model) for the whole app: file jobs and live recording share it. */
+export function getWhisperClient(): WhisperClient {
+  return (shared ??= new WhisperClient());
 }

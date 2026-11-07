@@ -8,21 +8,14 @@ import { computePeaks, WAVEFORM_BUCKETS } from "@/lib/pcm";
 import { estimateStorage, mediaFits, requestPersistence } from "@/lib/storage";
 import { getEmbedder } from "@/lib/embed-client";
 import { indexLecture } from "@/lib/search-index";
-import { WhisperClient } from "@/lib/whisper-client";
-import { JobContext, lectureLockName, resolveDevice, resolveModel, type Job } from "./job";
+import { getWhisperClient } from "@/lib/whisper-client";
+import { JobContext, resolveDevice, withLectureLock, resolveModel, type Job } from "./job";
 import { useNotes } from "./notes";
 import { getSettings } from "./settings";
 
 const errMsg = errorMessage;
 
-/** Hold a Web Lock for the job's lifetime so other tabs know it's still running. */
-function withLectureLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
-  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
-  return locks ? locks.request(lectureLockName(id), fn) : fn();
-}
-
 export function JobProvider({ children }: { children: ReactNode }) {
-  const client = useRef<WhisperClient | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const { startNotes } = useNotes();
@@ -78,8 +71,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
       return lectureId;
 
       async function run(id: string, f: File, m: ModelId, d: Device, f16: boolean) {
-        client.current ??= new WhisperClient();
-        const whisper = client.current;
+        const whisper = getWhisperClient();
         const update = (fn: (j: Job) => Job) =>
           setJob((j) => (j && j.lectureId === id ? fn(j) : j));
 

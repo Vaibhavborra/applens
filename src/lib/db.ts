@@ -131,6 +131,27 @@ export async function createLecture(
   return lecture;
 }
 
+/** A lecture that starts without a file (live recording); media is attached when it stops. */
+export async function createRecordingLecture(
+  opts: { title: string; fileName: string; model: ModelId; device: Device },
+  database: LectureDB = db,
+): Promise<Lecture> {
+  const lecture: Lecture = {
+    id: crypto.randomUUID(),
+    title: opts.title,
+    fileName: opts.fileName,
+    fileType: "audio/wav",
+    fileSize: 0,
+    createdAt: Date.now(),
+    status: "processing",
+    hasMedia: false,
+    model: opts.model,
+    device: opts.device,
+  };
+  await database.lectures.add(lecture);
+  return lecture;
+}
+
 export async function appendSegments(
   lectureId: string,
   segments: readonly Segment[],
