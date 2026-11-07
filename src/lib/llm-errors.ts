@@ -16,6 +16,7 @@ export function deviceLostMessage(gpuName: string | null): string {
     `Your GPU${which} stopped responding while writing notes. This usually means it's an integrated ` +
     `or low-power GPU that can't run the language model fast enough. If your computer also has a ` +
     `dedicated GPU, make the browser use it (Windows: Settings → System → Display → Graphics → ` +
-    `your browser → High performance), restart the browser and try again. Your transcript is unaffected.`
+    `your browser → High performance), restart the browser and try again. Or write notes with Ollama on this computer instead ` +
+    `(choose Ollama under Generate notes). Your transcript is unaffected.`
   );
 }

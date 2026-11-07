@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { isNotesModelId, type NotesModelId } from "@/lib/llm-models";
 import { isModelId, type ModelId } from "@/lib/models";
+import { OLLAMA_DEFAULT_URL, OLLAMA_SUGGESTED_MODEL } from "@/lib/ollama";
 
 /** User preferences, persisted to localStorage and shared across pages. */
 export interface Settings {
@@ -12,7 +13,13 @@ export interface Settings {
   autoNotes: boolean;
   /** Colour scheme; "system" follows the OS. */
   theme: Theme;
+  /** Where AI notes are written: in the browser (WebLLM/WebGPU) or by a local Ollama server. */
+  notesEngine: NotesEngine;
+  ollamaUrl: string;
+  ollamaModel: string;
 }
+
+export type NotesEngine = "browser" | "ollama";
 
 export type Theme = "system" | "light" | "dark";
 
@@ -23,7 +30,12 @@ const DEFAULTS: Settings = {
   notesModel: "fast",
   autoNotes: false,
   theme: "system",
+  notesEngine: "browser",
+  ollamaUrl: OLLAMA_DEFAULT_URL,
+  ollamaModel: OLLAMA_SUGGESTED_MODEL,
 };
+
+const str = (x: unknown, fallback: string) => (typeof x === "string" && x.trim() ? x : fallback);
 
 function load(): Settings {
   try {
@@ -36,6 +48,9 @@ function load(): Settings {
       notesModel: isNotesModelId(raw.notesModel) ? raw.notesModel : DEFAULTS.notesModel,
       autoNotes: typeof raw.autoNotes === "boolean" ? raw.autoNotes : DEFAULTS.autoNotes,
       theme: raw.theme === "light" || raw.theme === "dark" ? raw.theme : "system",
+      notesEngine: raw.notesEngine === "ollama" ? "ollama" : "browser",
+      ollamaUrl: str(raw.ollamaUrl, DEFAULTS.ollamaUrl),
+      ollamaModel: str(raw.ollamaModel, DEFAULTS.ollamaModel),
     };
   } catch {
     return DEFAULTS;

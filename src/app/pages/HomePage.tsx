@@ -71,7 +71,7 @@ export function HomePage() {
             file. Transcripts are always saved.
           </span>
         </label>
-        {gpu?.webgpu && (
+        {(gpu?.webgpu || settings.notesEngine === "ollama") && (
           <label className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <input
               type="checkbox"
@@ -81,8 +81,10 @@ export function HomePage() {
               data-testid="auto-notes"
             />
             <span>
-              Write AI notes and flashcards automatically after transcribing. The notes model (
-              {formatBytes(getNotesModel(settings.notesModel).sizeMB * 1e6)}) downloads once.
+              Write AI notes and flashcards automatically after transcribing.{" "}
+              {settings.notesEngine === "ollama"
+                ? `Uses ${settings.ollamaModel} in Ollama.`
+                : `The notes model (${formatBytes(getNotesModel(settings.notesModel).sizeMB * 1e6)}) downloads once.`}
             </span>
           </label>
         )}

@@ -68,7 +68,17 @@ Notes are written by a small instruct model running on WebGPU via WebLLM (in a W
 
 Measured on an RTX (Ampere) laptop GPU, 4.4-min lecture: Fast ≈ 50 s, Better ≈ 107 s (both after the model is cached).
 
-**Integrated GPUs:** on an AMD Vega iGPU, WebLLM loses the WebGPU device on any prompt over ~300 tokens (Windows GPU watchdog), regardless of model size or precision. The app detects this and explains how to switch the browser to the dedicated GPU (Chrome on Windows ignores WebGPU's `powerPreference`; Windows' per-app Graphics setting decides). Transcription still works on iGPUs.
+**Integrated GPUs:** on an AMD Vega iGPU, WebLLM loses the WebGPU device on any prompt over ~300 tokens (Windows GPU watchdog), regardless of model size or precision. The app detects this and explains how to switch the browser to the dedicated GPU (Chrome on Windows ignores WebGPU's `powerPreference`; Windows' per-app Graphics setting decides). Transcription still works on iGPUs. Or use Ollama (below).
+
+### Ollama (optional)
+
+Notes can be written by [Ollama](https://ollama.com) on the same computer instead of in the browser: pick **Ollama on this computer** above the Generate button. Ollama runs on the CPU or any GPU, so this also works where WebGPU doesn't. It's free and local; nothing is uploaded.
+
+```sh
+ollama pull qwen2.5:3b   # suggested; any installed model can be picked in the app
+```
+
+Ollama accepts requests from `localhost` pages by default. To use it from the deployed site, allow that origin and restart Ollama, e.g. `OLLAMA_ORIGINS=https://your-site.pages.dev`. Requests use structured outputs (the same JSON schemas as WebLLM) with `num_ctx` 8192. `node scripts/e2e-ollama.mjs <file>` tests the integration against a mock Ollama; add `--real=http://localhost:11434 --model=qwen2.5:3b` to use a real one.
 
 ## Search
 

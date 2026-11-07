@@ -1,11 +1,12 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useNotes, type NotesJob } from "@/app/notes";
-import { updateSettings, useSettings } from "@/app/settings";
+import { getSettings, updateSettings, useSettings, type NotesEngine } from "@/app/settings";
 import { useGpu } from "@/app/useGpu";
 import { db, type Lecture, type StoredNotes } from "@/lib/db";
 import { formatBytes } from "@/lib/format";
 import { NOTES_MODELS } from "@/lib/llm-models";
 import { formatTimestamp } from "@/lib/time";
+import { OllamaSettings } from "./OllamaSettings";
 import { Steps, type StepView } from "./Steps";
 import { TimeChip } from "./TimeChip";
 import { Button } from "./ui";
@@ -75,6 +76,7 @@ export function NotesPanel({ lecture, hasTranscript, onSeek }: Props) {
 }
 
 function notesSteps(job: NotesJob): StepView[] {
+  const ollama = getSettings().notesEngine === "ollama";
   const loadDone = job.stage !== "loading";
   const mapDone = job.stage === "reduce" || job.stage === "done";
   const eta =
@@ -82,9 +84,9 @@ function notesSteps(job: NotesJob): StepView[] {
   return [
     {
       id: "notes-model",
-      label: "Loading notes model",
+      label: ollama ? "Connecting to Ollama" : "Loading notes model",
       status: loadDone ? "done" : "active",
-      detail: loadDone ? undefined : `${Math.round(job.loadProgress * 100)}%`,
+      detail: loadDone || ollama ? undefined : `${Math.round(job.loadProgress * 100)}%`,
       progress: job.loadProgress,
     },
     {
@@ -117,6 +119,8 @@ function GenerateNotes({
   const gpu = useGpu();
   const settings = useSettings();
   const noGpu = gpu !== null && !gpu.webgpu;
+  const ollama = settings.notesEngine === "ollama";
+  const canRun = ollama || (gpu !== null && !noGpu);
 
   return (
     <div className="space-y-4" data-testid="notes-empty">
@@ -124,51 +128,57 @@ function GenerateNotes({
         <p className="font-medium">Turn this transcript into study notes</p>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           A summary, notes with headings, key terms and flashcards. Written by a small language
-          model running on your GPU; nothing is uploaded.
+          model on your own computer; nothing is uploaded.
         </p>
       </div>
 
-      {noGpu ? (
+      <EnginePicker value={settings.notesEngine} />
+
+      {ollama ? (
+        <OllamaSettings />
+      ) : noGpu ? (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          AI notes need WebGPU, which this browser doesn't provide. Try Chrome or Edge 113+ (or
-          Safari 26+). The transcript, player and search still work here.
+          In-browser AI notes need WebGPU, which this browser doesn't provide. Try Chrome or Edge
+          113+ (or Safari 26+), or use Ollama. The transcript, player and search still work here.
         </p>
       ) : (
-        <>
-          <fieldset className="grid gap-2 sm:grid-cols-2">
-            <legend className="sr-only">Notes model</legend>
-            {NOTES_MODELS.map((m) => (
-              <label
-                key={m.id}
-                className={`flex cursor-pointer flex-col rounded-lg border p-3 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
-                  settings.notesModel === m.id
-                    ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
-                    : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="notes-model"
-                  value={m.id}
-                  checked={settings.notesModel === m.id}
-                  onChange={() => updateSettings({ notesModel: m.id })}
-                  className="sr-only"
-                />
-                <span className="flex items-baseline justify-between gap-2">
-                  <span className="font-medium">{m.label}</span>
-                  <span className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
-                    {formatBytes(m.sizeMB * 1e6)}
-                  </span>
+        <fieldset className="grid gap-2 sm:grid-cols-2">
+          <legend className="sr-only">Notes model</legend>
+          {NOTES_MODELS.map((m) => (
+            <label
+              key={m.id}
+              className={`flex cursor-pointer flex-col rounded-lg border p-3 text-sm has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-indigo-500 ${
+                settings.notesModel === m.id
+                  ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
+                  : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700"
+              }`}
+            >
+              <input
+                type="radio"
+                name="notes-model"
+                value={m.id}
+                checked={settings.notesModel === m.id}
+                onChange={() => updateSettings({ notesModel: m.id })}
+                className="sr-only"
+              />
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="font-medium">{m.label}</span>
+                <span className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400">
+                  {formatBytes(m.sizeMB * 1e6)}
                 </span>
-                <span className="mt-0.5 text-zinc-500 dark:text-zinc-400">{m.blurb}</span>
-              </label>
-            ))}
-          </fieldset>
+              </span>
+              <span className="mt-0.5 text-zinc-500 dark:text-zinc-400">{m.blurb}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {canRun && (
+        <>
           <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="primary"
               onClick={onGenerate}
-              disabled={!transcriptReady || busyElsewhere || gpu === null}
+              disabled={!transcriptReady || busyElsewhere || (!ollama && gpu === null)}
               data-testid="generate-notes"
             >
               Generate notes
@@ -178,7 +188,9 @@ function GenerateNotes({
                 ? "Available once the transcript is complete."
                 : busyElsewhere
                   ? "Another lecture's notes are being written."
-                  : `The model downloads once, then it's cached.${gpu?.name ? ` Runs on: ${gpu.name}.` : ""}`}
+                  : ollama
+                    ? `Uses ${settings.ollamaModel} in Ollama.`
+                    : `The model downloads once, then it's cached.${gpu?.name ? ` Runs on: ${gpu.name}.` : ""}`}
             </span>
           </div>
           <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -260,7 +272,9 @@ function NotesFooter({
   onRegenerate: () => void;
   disabled: boolean;
 }) {
-  const modelName = notes.model.replace(/-q4f(16|32)_1-MLC$/, "").replace(/-/g, " ");
+  const modelName = notes.model.startsWith("ollama:")
+    ? `${notes.model.slice(7)} (Ollama)`
+    : notes.model.replace(/-q4f(16|32)_1-MLC$/, "").replace(/-/g, " ");
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 pt-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
       <span>
@@ -271,6 +285,39 @@ function NotesFooter({
       <Button variant="ghost" onClick={onRegenerate} disabled={disabled} className="text-xs">
         Regenerate
       </Button>
+    </div>
+  );
+}
+
+const ENGINES: { id: NotesEngine; label: string }[] = [
+  { id: "browser", label: "In this browser" },
+  { id: "ollama", label: "Ollama on this computer" },
+];
+
+function EnginePicker({ value }: { value: NotesEngine }) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Where notes are written"
+      className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-sm dark:border-zinc-800"
+    >
+      {ENGINES.map((e) => (
+        <button
+          key={e.id}
+          type="button"
+          role="radio"
+          aria-checked={value === e.id}
+          onClick={() => updateSettings({ notesEngine: e.id })}
+          className={`rounded-md px-3 py-1 ${
+            value === e.id
+              ? "bg-indigo-600 text-white"
+              : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          }`}
+          data-testid={`engine-${e.id}`}
+        >
+          {e.label}
+        </button>
+      ))}
     </div>
   );
 }
