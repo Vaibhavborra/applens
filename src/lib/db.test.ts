@@ -5,11 +5,13 @@ import {
   attachMedia,
   createLecture,
   deleteLecture,
+  getFlashcards,
   getSegments,
   LectureDB,
   markInterrupted,
   removeMedia,
   resetTranscript,
+  saveNotes,
   titleFromFileName,
 } from "./db";
 
@@ -110,5 +112,40 @@ describe("lecture lifecycle", () => {
     expect((await database.lectures.get(running.id))?.status).toBe("processing");
     expect((await database.lectures.get(stale.id))?.status).toBe("interrupted");
     expect((await database.lectures.get(done.id))?.status).toBe("done");
+  });
+
+  const assembled = (n: number) => ({
+    title: "T",
+    summary: "S",
+    sections: [{ heading: "H", start: 0, bullets: [{ text: "b", start: 0 }] }],
+    keyTerms: [{ term: "x", definition: "y" }],
+    flashcards: Array.from({ length: n }, (_, i) => ({
+      question: `q${i}`,
+      answer: "a",
+      sourceStart: 10 - i,
+    })),
+    markdown: "# T",
+  });
+  const meta = { model: "m", ms: 1, fallbackParts: 0 };
+
+  it("saves notes and replaces flashcards on regenerate", async () => {
+    const l = await createLecture(file(), opts, database);
+    await saveNotes(l.id, assembled(3), meta, database);
+    await saveNotes(l.id, assembled(2), meta, database);
+    expect((await database.notes.get(l.id))?.summary).toBe("S");
+    const cards = await getFlashcards(l.id, database);
+    expect(cards.map((c) => c.question)).toEqual(["q1", "q0"]); // sorted by sourceStart
+  });
+
+  it("re-transcribing and deleting clear notes and flashcards", async () => {
+    const l = await createLecture(file(), opts, database);
+    await saveNotes(l.id, assembled(2), meta, database);
+    await resetTranscript(l.id, database);
+    expect(await database.notes.get(l.id)).toBeUndefined();
+    expect(await getFlashcards(l.id, database)).toEqual([]);
+    await saveNotes(l.id, assembled(2), meta, database);
+    await deleteLecture(l.id, database);
+    expect(await database.notes.count()).toBe(0);
+    expect(await database.flashcards.count()).toBe(0);
   });
 });

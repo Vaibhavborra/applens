@@ -25,8 +25,11 @@ let exited = false;
 server.on("exit", () => (exited = true));
 
 const results = [];
-const check = (name, pass, info = "") =>
+const check = (name, pass, info = "") => {
   results.push({ name, pass: Boolean(pass), info: String(info) });
+  // Stream progress so a hang shows where it stopped.
+  console.log(`${pass ? "ok  " : "FAIL"} ${name}${info ? ` (${String(info).slice(0, 80)})` : ""}`);
+};
 
 try {
   for (let i = 0; ; i++) {
@@ -64,6 +67,7 @@ try {
   const lines = () => page.locator("[data-testid=transcript] li");
   const waitDone = () =>
     page.waitForSelector('[data-testid=transcript-status][data-status="done"]', {
+      state: "attached", // the heading can be visually empty (screen-reader text only)
       timeout: 10 * 60_000,
     });
   const waitList = (count) =>

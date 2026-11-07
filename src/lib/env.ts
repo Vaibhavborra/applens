@@ -14,8 +14,15 @@ export function detectCapabilities(): Capabilities {
   };
 }
 
+interface MinimalAdapter {
+  features: { has(name: string): boolean };
+  info?: { vendor?: string; architecture?: string; description?: string };
+}
+
 interface MinimalGpu {
-  requestAdapter(): Promise<{ features: { has(name: string): boolean } } | null>;
+  requestAdapter(opts?: {
+    powerPreference?: "high-performance" | "low-power";
+  }): Promise<MinimalAdapter | null>;
 }
 
 let probe: Promise<GpuInfo> | null = null;
@@ -33,9 +40,12 @@ async function doProbe(): Promise<GpuInfo> {
   const gpu = (navigator as Navigator & { gpu?: MinimalGpu }).gpu;
   if (!gpu) return { webgpu: false, f16: false };
   try {
-    const adapter = await gpu.requestAdapter();
+    // Same preference WebLLM uses, so the reported GPU matches the one notes run on.
+    const adapter = await gpu.requestAdapter({ powerPreference: "high-performance" });
     if (!adapter) return { webgpu: false, f16: false };
-    return { webgpu: true, f16: adapter.features.has("shader-f16") };
+    const i = adapter.info;
+    const name = [i?.vendor, i?.architecture || i?.description].filter(Boolean).join(" ") || null;
+    return { webgpu: true, f16: adapter.features.has("shader-f16"), name };
   } catch {
     return { webgpu: false, f16: false };
   }

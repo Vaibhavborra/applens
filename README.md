@@ -2,7 +2,7 @@
 
 Turn any lecture recording (mp3, mp4, m4a, wav, webm, mov…) into a timestamped transcript, notes, a summary, flashcards and semantic search — **entirely in your browser**. No backend, no API keys, $0 to host.
 
-> Status: Phase 5 (lectures saved locally in IndexedDB; reopen, rename, delete). See [PLAN.md](PLAN.md) for the roadmap.
+> Status: Phase 6 (on-device AI notes, summary, key terms and flashcards). See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Develop
 
@@ -18,6 +18,7 @@ npm run e2e          # decode smoke test in your installed Chrome (playwright-co
 node scripts/e2e-transcribe.mjs <file> [--device=wasm] [--model=fast|balanced|best] [--expect=word,word]
 node scripts/e2e-player.mjs <speech-file>   # seek, highlight, shortcuts, fallback playback
 node scripts/e2e-persist.mjs <short-speech> <long-speech>   # save, reload, interrupt, delete
+node scripts/e2e-notes.mjs <speech-file> [--model=fast|better] [--hp]   # AI notes (needs WebGPU)
 ```
 
 ## Deploy (Cloudflare Pages)
@@ -56,6 +57,17 @@ The original file plays in a `<video>` or `<audio>` element (audio-only video co
 
 Lectures live in IndexedDB (Dexie): `lectures` (metadata + waveform peaks), `segments` (written window-by-window as transcription runs, so a closed tab keeps what's done), and `media` (the original file, kept separate so listing lectures never loads blobs). Saving the recording is optional; without it you keep the transcript and can re-attach the file later. A tab running a job holds a Web Lock per lecture, so on startup only genuinely abandoned jobs are marked "interrupted" and can be transcribed again.
 
+## AI notes
+
+Notes are written by a small instruct model running on WebGPU via WebLLM (in a Web Worker): **Fast** = Qwen2.5 1.5B (~880 MB), **Better** = Qwen2.5 3B (~1.75 GB). Map-reduce keeps every prompt inside a 4K context:
+
+1. **Map** – the transcript is split into ~500-token chunks (~1.5–2 min of speech) fed as `[m:ss] text` lines. Each chunk gets one grammar-constrained JSON call returning a title, timestamped bullets, key terms and flashcards. The schema's `minItems` scales with chunk length, which stops small models from summarising only the first idea. Invalid output is retried once, then falls back to plain-text bullets. Cited timestamps are clamped to the chunk.
+2. **Reduce** – one call sees only part titles and top bullets and returns the lecture title, a summary and (for 4+ parts) a grouping of parts under headings, repaired if it's invalid. The final notes are assembled from the map output in code, so the reduce step can't drop content.
+
+Measured on an RTX (Ampere) laptop GPU, 4.4-min lecture: Fast ≈ 50 s, Better ≈ 107 s (both after the model is cached).
+
+**Integrated GPUs:** on an AMD Vega iGPU, WebLLM loses the WebGPU device on any prompt over ~300 tokens (Windows GPU watchdog), regardless of model size or precision. The app detects this and explains how to switch the browser to the dedicated GPU (Chrome on Windows ignores WebGPU's `powerPreference`; Windows' per-app Graphics setting decides). Transcription still works on iGPUs.
+
 ## Stack
 
-Vite · React 19 · TypeScript (strict) · Tailwind CSS v4 · Transformers.js · Dexie · Vitest · ESLint · Prettier
+Vite · React 19 · TypeScript (strict) · Tailwind CSS v4 · Transformers.js · WebLLM · Dexie · Vitest · ESLint · Prettier

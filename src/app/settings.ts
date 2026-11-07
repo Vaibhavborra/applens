@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { isNotesModelId, type NotesModelId } from "@/lib/llm-models";
 import { isModelId, type ModelId } from "@/lib/models";
 
 /** User preferences, persisted to localStorage and shared across pages. */
@@ -6,10 +7,13 @@ export interface Settings {
   model: ModelId;
   /** Store the original file in IndexedDB so lectures can be replayed later. */
   keepMedia: boolean;
+  notesModel: NotesModelId;
+  /** Write AI notes automatically when a transcription finishes (off: big first download). */
+  autoNotes: boolean;
 }
 
 const KEY = "lna.settings";
-const DEFAULTS: Settings = { model: "fast", keepMedia: true };
+const DEFAULTS: Settings = { model: "fast", keepMedia: true, notesModel: "fast", autoNotes: false };
 
 function load(): Settings {
   try {
@@ -19,6 +23,8 @@ function load(): Settings {
     return {
       model: isModelId(raw.model) ? raw.model : DEFAULTS.model,
       keepMedia: typeof raw.keepMedia === "boolean" ? raw.keepMedia : DEFAULTS.keepMedia,
+      notesModel: isNotesModelId(raw.notesModel) ? raw.notesModel : DEFAULTS.notesModel,
+      autoNotes: typeof raw.autoNotes === "boolean" ? raw.autoNotes : DEFAULTS.autoNotes,
     };
   } catch {
     return DEFAULTS;

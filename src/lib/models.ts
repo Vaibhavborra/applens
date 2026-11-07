@@ -70,6 +70,8 @@ export function getModel(id: ModelId): WhisperModel {
 export interface GpuInfo {
   webgpu: boolean;
   f16: boolean;
+  /** e.g. "nvidia ampere"; null when unknown. */
+  name?: string | null;
 }
 
 export function pickVariant(model: WhisperModel, device: Device, gpu: GpuInfo): Variant | null {

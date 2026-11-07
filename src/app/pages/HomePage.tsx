@@ -6,6 +6,7 @@ import { ModelPicker } from "@/components/ModelPicker";
 import { Card } from "@/components/ui";
 import { db } from "@/lib/db";
 import { detectCapabilities } from "@/lib/env";
+import { getNotesModel } from "@/lib/llm-models";
 import { formatBytes } from "@/lib/format";
 import { estimateStorage, type StorageEstimate } from "@/lib/storage";
 import { resolveDevice, resolveModel, useJob } from "../job";
@@ -66,6 +67,21 @@ export function HomePage() {
             file. Transcripts are always saved.
           </span>
         </label>
+        {gpu?.webgpu && (
+          <label className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <input
+              type="checkbox"
+              checked={settings.autoNotes}
+              onChange={(e) => updateSettings({ autoNotes: e.target.checked })}
+              className="mt-0.5 size-4 accent-indigo-600"
+              data-testid="auto-notes"
+            />
+            <span>
+              Write AI notes and flashcards automatically after transcribing. The notes model (
+              {formatBytes(getNotesModel(settings.notesModel).sizeMB * 1e6)}) downloads once.
+            </span>
+          </label>
+        )}
         {busy && (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             A lecture is being transcribed. You can add another when it finishes.

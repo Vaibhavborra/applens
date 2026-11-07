@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type { Segment } from "@/types/transcript";
 import type { Device, ModelId } from "./models";
+import type { AssembledNotes, Card, KeyTerm, NotesSection } from "./notes/types";
 import type { Peaks } from "./pcm";
 
 export type LectureStatus = "processing" | "done" | "cancelled" | "interrupted" | "error";
@@ -35,10 +36,32 @@ export interface StoredMedia {
   blob: Blob;
 }
 
+export interface StoredNotes {
+  lectureId: string;
+  title: string;
+  summary: string;
+  sections: NotesSection[];
+  keyTerms: KeyTerm[];
+  markdown: string;
+  /** MLC model id that wrote these notes. */
+  model: string;
+  createdAt: number;
+  ms: number;
+  /** Parts where JSON failed and plain-text bullets were used. */
+  fallbackParts: number;
+}
+
+export interface StoredFlashcard extends Card {
+  id?: number;
+  lectureId: string;
+}
+
 export class LectureDB extends Dexie {
   lectures!: EntityTable<Lecture, "id">;
   segments!: EntityTable<StoredSegment, "id">;
   media!: EntityTable<StoredMedia, "lectureId">;
+  notes!: EntityTable<StoredNotes, "lectureId">;
+  flashcards!: EntityTable<StoredFlashcard, "id">;
 
   constructor(name = "lecture-notes-ai") {
     super(name);
@@ -46,6 +69,11 @@ export class LectureDB extends Dexie {
       lectures: "id, createdAt, status",
       segments: "++id, lectureId, [lectureId+start]",
       media: "lectureId",
+    });
+    // v2 (Phase 6): AI notes + flashcards. Additive; no data migration needed.
+    this.version(2).stores({
+      notes: "lectureId",
+      flashcards: "++id, lectureId",
     });
   }
 }
@@ -106,25 +134,34 @@ export function getSegments(lectureId: string, database: LectureDB = db): Promis
 
 /** Clear the transcript (and per-run fields) before transcribing a lecture again. */
 export async function resetTranscript(lectureId: string, database: LectureDB = db): Promise<void> {
-  await database.transaction("rw", database.lectures, database.segments, async () => {
-    await database.segments.where("lectureId").equals(lectureId).delete();
-    await database.lectures
-      .where("id")
-      .equals(lectureId)
-      .modify((l) => {
-        l.status = "processing";
-        delete l.error;
-        delete l.transcribeMs;
-      });
-  });
+  await database.transaction(
+    "rw",
+    [database.lectures, database.segments, database.notes, database.flashcards],
+    async () => {
+      await database.segments.where("lectureId").equals(lectureId).delete();
+      // Notes describe the old transcript, so they go too.
+      await database.notes.delete(lectureId);
+      await database.flashcards.where("lectureId").equals(lectureId).delete();
+      await database.lectures
+        .where("id")
+        .equals(lectureId)
+        .modify((l) => {
+          l.status = "processing";
+          delete l.error;
+          delete l.transcribeMs;
+        });
+    },
+  );
 }
 
 export async function deleteLecture(lectureId: string, database: LectureDB = db): Promise<void> {
   await database.transaction(
     "rw",
-    [database.lectures, database.segments, database.media],
+    [database.lectures, database.segments, database.media, database.notes, database.flashcards],
     async () => {
       await database.segments.where("lectureId").equals(lectureId).delete();
+      await database.flashcards.where("lectureId").equals(lectureId).delete();
+      await database.notes.delete(lectureId);
       await database.media.delete(lectureId);
       await database.lectures.delete(lectureId);
     },
@@ -162,4 +199,34 @@ export async function markInterrupted(
   );
   await Promise.all(stale.map((l) => database.lectures.update(l.id, { status: "interrupted" })));
   return stale.length;
+}
+
+/** Replace a lecture's notes and flashcards atomically. */
+export async function saveNotes(
+  lectureId: string,
+  notes: AssembledNotes,
+  meta: { model: string; ms: number; fallbackParts: number },
+  database: LectureDB = db,
+): Promise<void> {
+  await database.transaction("rw", database.notes, database.flashcards, async () => {
+    await database.notes.put({
+      lectureId,
+      title: notes.title,
+      summary: notes.summary,
+      sections: notes.sections,
+      keyTerms: notes.keyTerms,
+      markdown: notes.markdown,
+      createdAt: Date.now(),
+      ...meta,
+    });
+    await database.flashcards.where("lectureId").equals(lectureId).delete();
+    await database.flashcards.bulkAdd(notes.flashcards.map((c) => ({ ...c, lectureId })));
+  });
+}
+
+export function getFlashcards(
+  lectureId: string,
+  database: LectureDB = db,
+): Promise<StoredFlashcard[]> {
+  return database.flashcards.where("lectureId").equals(lectureId).sortBy("sourceStart");
 }

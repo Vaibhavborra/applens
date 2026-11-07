@@ -3,6 +3,7 @@ import { Card } from "@/components/ui";
 import { markInterrupted } from "@/lib/db";
 import { lectureLockName } from "./job";
 import { JobProvider } from "./JobProvider";
+import { NotesProvider } from "./NotesProvider";
 import { Link } from "./Link";
 import { HomePage } from "./pages/HomePage";
 import { LecturePage } from "./pages/LecturePage";
@@ -10,9 +11,11 @@ import { useRoute } from "./router";
 
 export function App() {
   return (
-    <JobProvider>
-      <Shell />
-    </JobProvider>
+    <NotesProvider>
+      <JobProvider>
+        <Shell />
+      </JobProvider>
+    </NotesProvider>
   );
 }
 

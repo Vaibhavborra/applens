@@ -1,8 +1,11 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRef, useState, type ReactNode } from "react";
+import { FlashcardsPanel } from "@/components/FlashcardsPanel";
 import { JobSteps } from "@/components/JobSteps";
 import { LectureStatusBadge } from "@/components/LectureStatusBadge";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { NotesPanel } from "@/components/NotesPanel";
+import { TabPanel, Tabs, type TabDef } from "@/components/Tabs";
 import { TranscriptView } from "@/components/TranscriptView";
 import { Button, Card } from "@/components/ui";
 import { Waveform } from "@/components/Waveform";
@@ -12,6 +15,7 @@ import { formatBytes, formatDate } from "@/lib/format";
 import { getModel } from "@/lib/models";
 import { formatTimestamp } from "@/lib/time";
 import { useJob, type Job } from "../job";
+import { useNotes } from "../notes";
 import { Link } from "../Link";
 import { navigate } from "../router";
 import {
@@ -44,6 +48,8 @@ export function LecturePage({ id }: { id: string }) {
   }
   return <LectureView lecture={lecture} segments={segments} live={live} />;
 }
+
+type LectureTab = "notes" | "transcript" | "flashcards";
 
 interface MediaSource {
   blob: Blob;
@@ -96,6 +102,39 @@ function LectureView({
     void start(file, lecture.id);
   };
   const canRerun = !busy && source !== null && lecture.status !== "processing";
+  const seekTo = media && source ? (t: number) => seek(t) : undefined;
+
+  // Default to Notes once they exist, else Transcript, until the user picks a tab.
+  const [tab, setTab] = useState<LectureTab | null>(null);
+  const hasNotes = useLiveQuery(
+    async () => (await db.notes.get(lecture.id)) !== undefined,
+    [lecture.id],
+  );
+  const cardCount = useLiveQuery(
+    () => db.flashcards.where("lectureId").equals(lecture.id).count(),
+    [lecture.id],
+  );
+  const { notesJob, notesBusy } = useNotes();
+  const writingNotes = notesBusy && notesJob?.lectureId === lecture.id;
+  const currentTab: LectureTab = tab ?? (hasNotes ? "notes" : "transcript");
+  const tabs: TabDef<LectureTab>[] = [
+    {
+      id: "notes",
+      label: (
+        <span className="inline-flex items-center gap-1.5">
+          Notes
+          {writingNotes && (
+            <span
+              aria-label="writing"
+              className="size-3 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"
+            />
+          )}
+        </span>
+      ),
+    },
+    { id: "transcript", label: "Transcript" },
+    { id: "flashcards", label: cardCount ? `Flashcards (${cardCount})` : "Flashcards" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -178,28 +217,44 @@ function LectureView({
         lecture.status !== "processing" ||
         live?.transcribe.status !== "pending") &&
         !(live?.decode.status === "error") && (
-          <Card>
-            <h2
-              className="mb-3 flex items-baseline justify-between text-sm font-medium text-zinc-500 dark:text-zinc-400"
-              data-testid="transcript-status"
-              data-status={
-                live?.transcribe.status ?? (lecture.status === "done" ? "done" : lecture.status)
-              }
-            >
-              Transcript
-              {media && source && segments.length > 0 && (
-                <span className="text-xs font-normal">
-                  Click a line to jump there · Space play/pause · ←/→ 5 s
-                </span>
-              )}
-            </h2>
-            <TranscriptView
-              segments={segments}
-              live={transcribing}
-              active={source ? active : -1}
-              follow={playing}
-              onSeek={media && source ? (t) => seek(t) : undefined}
-            />
+          <Card className="pt-2">
+            <Tabs idPrefix="lecture" tabs={tabs} value={currentTab} onChange={setTab} />
+            {/* Panels stay mounted (scroll position, flipped cards survive tab switches). */}
+            <div hidden={currentTab !== "notes"}>
+              <TabPanel idPrefix="lecture" id="notes">
+                <NotesPanel lecture={lecture} hasTranscript={segments.length > 0} onSeek={seekTo} />
+              </TabPanel>
+            </div>
+            <div hidden={currentTab !== "transcript"}>
+              <TabPanel idPrefix="lecture" id="transcript">
+                <h2
+                  className="mb-3 flex items-baseline justify-between text-sm font-medium text-zinc-500 dark:text-zinc-400"
+                  data-testid="transcript-status"
+                  data-status={
+                    live?.transcribe.status ?? (lecture.status === "done" ? "done" : lecture.status)
+                  }
+                >
+                  <span className="sr-only">Transcript</span>
+                  {media && source && segments.length > 0 && (
+                    <span className="text-xs font-normal">
+                      Click a line to jump there · Space play/pause · ←/→ 5 s
+                    </span>
+                  )}
+                </h2>
+                <TranscriptView
+                  segments={segments}
+                  live={transcribing}
+                  active={source ? active : -1}
+                  follow={playing && currentTab === "transcript"}
+                  onSeek={seekTo}
+                />
+              </TabPanel>
+            </div>
+            <div hidden={currentTab !== "flashcards"}>
+              <TabPanel idPrefix="lecture" id="flashcards">
+                <FlashcardsPanel lectureId={lecture.id} onSeek={seekTo} />
+              </TabPanel>
+            </div>
           </Card>
         )}
 
